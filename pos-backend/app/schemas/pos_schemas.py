@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
-
+from pydantic import BaseModel, Field # Import Field
 # --- AUTH SCHEMAS ---
 class UserBase(BaseModel):
     username: str
@@ -70,9 +70,8 @@ class SettingUpdate(BaseModel):
 class IngredientCreate(BaseModel):
     name: str
     unit: str
-    current_stock: int
-    min_stock: int
-
+    current_stock: int = Field(default=0, ge=0, description="Stock cannot be negative")
+    min_stock: int = Field(default=0, ge=0, description="Minimum stock cannot be negative")
 
 class IngredientResponse(BaseModel):
     id: int

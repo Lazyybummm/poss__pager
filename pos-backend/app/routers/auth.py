@@ -68,12 +68,15 @@ async def restaurant_signup(
 # --- 2. PUBLIC: LOGIN ---
 @router.post("/login", response_model=Token)
 async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
+    
+    print("LOGIN ATTEMPT:", user_in.email)
     """
     Standard login for all roles (Admin, Manager, Cashier).
     """
     result = await db.execute(select(User).where(User.email == user_in.email))
     user = result.scalars().first()
-    
+    print("DB QUERY EMAIL:", user_in.email)
+
     if not user or not verify_password(user_in.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
