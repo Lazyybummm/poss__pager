@@ -1,4 +1,9 @@
 import uvicorn
+from dotenv import load_dotenv
+import os
+
+# 1. Load the .env file IMMEDIATELY
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, products, orders, settings_router

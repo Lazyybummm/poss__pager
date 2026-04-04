@@ -1,30 +1,25 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic import ConfigDict
 
 class Settings(BaseSettings):
-    # Database Config
-    DB_HOST: str
+    # Database fields
+    DB_USER: str = "root"
+    DB_PASSWORD: str = ""
+    DB_HOST: str = "127.0.0.1"
     DB_PORT: int = 3306
-    DB_USER: str
-    DB_PASSWORD: str
-    DB_NAME: str
-
-    # Security
-    JWT_SECRET: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours to match standard Node JWTs
-
-    # Server Config
-    PORT: int = 3000
+    DB_NAME: str = "poss_pager"
     
-    # Hardware Config
-    PREFERRED_PORT: str = "COM3"
-    BAUD_RATE: int = 115200
+    # Auth & URL
+    JWT_SECRET: str = "supersecretkey"
+    DATABASE_URL: str = ""
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = 'utf-8'
-        case_sensitive = False
-        extra = "ignore"
+    # Hardware/Serial fields - ADD THIS!
+    PREFERRED_PORT: str = "/dev/cu.usbserial-0001" # Default for Mac
+    PORT: int = 8000 # Adding this since main.py uses settings.PORT
+    BAUD_RATE: int = 115200
+    model_config = ConfigDict(
+        env_file=".env",
+        extra="ignore"
+    )
 
 settings = Settings()
