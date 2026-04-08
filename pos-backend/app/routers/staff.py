@@ -5,10 +5,9 @@ from typing import List
 
 from app.db.session import get_db
 from app.models.pos_models import User
-from app.schemas.pos_schemas import UserCreate, UserBase
+from app.schemas.pos_schemas import UserCreate, UserBase, UserUpdate
 from app.core.dependencies import get_current_user
 from app.core.security import get_password_hash as hash_password
-
 router = APIRouter(prefix="/staff", tags=["Staff"])
 
 

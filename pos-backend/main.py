@@ -13,6 +13,7 @@ app = FastAPI(title="POS Backend - FastAPI")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://192.168.1.114:5173",
     "https://*.vercel.app"
 ]
 # Same CORS policy as Express app.use(cors())
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://192.168.1.114:5173",
         "https://posspager.vercel.app"
     ],
     allow_credentials=True,

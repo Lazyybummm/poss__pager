@@ -16,27 +16,32 @@ async def get_products(
 ):
     if not current_user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    # Everyone can view their own restaurant's products
-    result = await db.execute(select(Product).where(Product.restaurant_id == current_user.restaurant_id))
+    
+    result = await db.execute(
+        select(Product).where(Product.restaurant_id == current_user.restaurant_id)
+    )
     return result.scalars().all()
-
 @router.post("/", response_model=ProductResponse)
 async def create_product(
     product_in: ProductCreate, 
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # RBAC: Only admin and manager creates products
-    if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(status_code=403, detail="Only admin or manager can add products")
+    # This approach ensures only the fields in your MODEL are used
     new_product = Product(
-        **product_in.dict(), 
-        restaurant_id=current_user.restaurant_id # Force current restaurant
+        name=product_in.name,
+        price=product_in.price,
+        category=product_in.category,
+        stock=product_in.stock,
+        image_url=product_in.image_url,
+        restaurant_id=current_user.restaurant_id 
     )
+    
     db.add(new_product)
     await db.commit()
     await db.refresh(new_product)
     return new_product
+
 
 @router.put("/{product_id}", response_model=ProductResponse)
 async def update_product(
@@ -45,19 +50,20 @@ async def update_product(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # RBAC: Only admin and manager updates
     if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(status_code=403, detail="Only admin or manager can add products")
-    # Ensure product belongs to this restaurant
+        raise HTTPException(status_code=403, detail="Only admin or manager can edit products")
+
     result = await db.execute(select(Product).where(
         Product.id == product_id, 
         Product.restaurant_id == current_user.restaurant_id
     ))
     product = result.scalars().first()
+    
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    for var, value in product_in.dict().items():
+    update_data = product_in.dict(exclude_unset=True)
+    for var, value in update_data.items():
         setattr(product, var, value)
     
     await db.commit()
@@ -70,7 +76,6 @@ async def delete_product(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # RBAC: Only admin deletes
     if current_user.role not in ["admin","manager"]:
         raise HTTPException(status_code=403, detail="Only admins can delete products")
 
