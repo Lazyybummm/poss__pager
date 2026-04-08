@@ -4,7 +4,7 @@ import { getTheme, COMMON_STYLES } from './theme';
 
 export default function AdminSettingsModal({ open, onClose, restaurantId, isDarkMode }) {
   // Use fallback if env variable is missing
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
   
   const [upiId, setUpiId] = useState("");
   const [payeeName, setPayeeName] = useState("");

@@ -18,6 +18,7 @@ import {
 import { getTheme, COMMON_STYLES, FONTS } from "./theme";
 import POSView from "./POSView";
 import CheckoutModal from "./CheckoutModal";
+import StaffManager from "./StaffManager";
 import SalesReport from "./SalesReport";
 import AdminSettingsModal from "./AdminSettingsModal";
 import ActiveOrdersDrawer from "./ActiveOrdersDrawer";
@@ -26,7 +27,7 @@ import InventoryManager from "./InventoryManager";
 import ManagerDashboard from "./ManagerDashboard";
 import ProductManagement from "./ProductManagement";
 import RecipeManager from "./RecipeManager";
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const apiRequest = async (url, options = {}) => {
   const token = localStorage.getItem("auth_token");
   // Ensure we don't have double slashes if the user provided one in .env
@@ -308,43 +309,34 @@ export default function RestaurantVendorUI({
     }
   };
 
-  const handleAdminAddUser = async () => {
-    if (!newUser.username || !newUser.email || !newUser.password) {
-      return alert("Fill all fields");
-    }
+  const handleAdminAddUser = async (userData) => {
     const res = await apiRequest(`${API_URL}/staff/`, {
       method: "POST",
-     
-      body: JSON.stringify(newUser),
+      body: JSON.stringify(userData),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.detail || "Failed to create staff");
-      return;
-    }
-    setNewUser({ username: "", email: "", password: "", role: "cashier" });
-    refreshUsers();
-  };
-  const handleAdminUpdateUser = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await apiRequest(`${API_URL}/staff/${editingUser.id}`, {
-        method: "PUT",
-        body: JSON.stringify(editingUser),
-      });
-  
+    if (res.ok) {
+      refreshUsers();
+    } else {
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Update failed");
-  
-      // Refresh the list and close the edit state
-      await refreshUsers();
-      setEditingUser(null);
-      alert("Staff details updated successfully!");
+      alert(data.detail || "Failed to create staff");
+    }
+  };
+
+  const handleAdminUpdateUser = async (updatedUser) => {
+    try {
+      const res = await apiRequest(`${API_URL}/staff/${updatedUser.id}`, {
+        method: "PUT",
+        body: JSON.stringify(updatedUser),
+      });
+      if (res.ok) {
+        await refreshUsers();
+        alert("Staff details updated!");
+      }
     } catch (err) {
-      // This catches the detail string from backend instead of [object Object]
       alert(err.message);
     }
   };
+  
   const handleAdminDeleteUser = async (id) => {
     if (!confirm("Are you sure you want to delete this staff member?")) return;
   

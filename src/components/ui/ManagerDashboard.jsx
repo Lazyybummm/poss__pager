@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { getTheme, COMMON_STYLES } from "./theme";
 import { TrendingUp, AlertTriangle, ShoppingCart, Package, Info } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function ManagerDashboard({ apiRequest, isDarkMode, settings }) {
   const theme = getTheme(isDarkMode);
@@ -18,12 +18,15 @@ export default function ManagerDashboard({ apiRequest, isDarkMode, settings }) {
 
   const fetchDashboard = async () => {
     try {
-      const [s, l, t, a] = await Promise.all([
+      const results = await Promise.all([
         apiRequest(`${API_URL}/dashboard/summary`),
         apiRequest(`${API_URL}/dashboard/low-stock`),
         apiRequest(`${API_URL}/dashboard/top-products`),
         apiRequest(`${API_URL}/dashboard/active-orders`)
       ]);
+
+      console.log(results);
+
 
       if (s.ok) setSummary(await s.json());
       if (l.ok) setLowStock(await l.json());
