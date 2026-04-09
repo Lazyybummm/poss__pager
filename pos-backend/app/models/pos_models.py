@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Enum, ForeignKey, TIMESTAMP, func, Text, Float, CheckConstraint
+from sqlalchemy import Column, Integer, String, Numeric, Enum, ForeignKey, TIMESTAMP, func, Text, Float, CheckConstraint, JSON
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -26,16 +26,14 @@ class Product(Base):
     price = Column(Numeric(10, 2), nullable=False)
     stock = Column(Integer, nullable=False)
     category = Column(String(50), nullable=False)
-    
-    # Keep image_url as we need it for the UI
     image_url = Column(Text, nullable=True) 
-
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=True)
     
     __table_args__ = (
         CheckConstraint('price >= 0', name='check_price_not_negative'),
         CheckConstraint('stock >= 0', name='check_stock_not_negative'),
     )
+
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
@@ -46,6 +44,7 @@ class Order(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     token = Column(String(255)) 
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=False)
+    missing_ingredients = Column(JSON, default=list)  # ✅ ADD THIS LINE
     items = relationship("OrderItem", back_populates="order")
 
 class OrderItem(Base):

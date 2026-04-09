@@ -40,7 +40,7 @@ class ProductCreate(BaseModel):
     price: float
     category: str
     stock: int
-    image_url: Optional[str] = None # No description here
+    image_url: Optional[str] = None
 
 class ProductResponse(BaseModel):
     id: int
@@ -64,6 +64,7 @@ class OrderCreate(BaseModel):
     payment_method: str  # upi, cash, card
     token: int
     items: List[OrderItemCreate]
+    override_missing_ingredients: bool = False  # ✅ ADD THIS FIELD
 
 class OrderResponse(BaseModel):
     id: int
@@ -73,9 +74,25 @@ class OrderResponse(BaseModel):
     status: str
     created_at: datetime
     token: Optional[str]
+    missing_ingredients: Optional[List[int]] = None  # ✅ ADD THIS FIELD
 
     class Config:
         from_attributes = True
+
+# ✅ NEW SCHEMA: For missing ingredients check response
+class MissingIngredientCheck(BaseModel):
+    product_id: int
+    product_name: str
+    ingredient_id: int
+    ingredient_name: str
+    required_quantity: float
+    available_stock: int
+    shortfall: float
+    unit: str
+
+class InventoryCheckResponse(BaseModel):
+    can_fulfill: bool
+    missing_items: List[MissingIngredientCheck]
 
 # --- SETTINGS & INVENTORY SCHEMAS ---
 class SettingUpdate(BaseModel):

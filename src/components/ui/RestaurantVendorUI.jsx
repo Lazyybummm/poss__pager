@@ -27,10 +27,11 @@ import InventoryManager from "./InventoryManager";
 import ManagerDashboard from "./ManagerDashboard";
 import ProductManagement from "./ProductManagement";
 import RecipeManager from "./RecipeManager";
+import LowStockAlert from "./LowStockAlert";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const apiRequest = async (url, options = {}) => {
   const token = localStorage.getItem("auth_token");
-  // Ensure we don't have double slashes if the user provided one in .env
   const cleanUrl = url.replace(/([^:]\/)\/+/g, "$1"); 
   
   const headers = {
@@ -49,9 +50,6 @@ const apiRequest = async (url, options = {}) => {
   return response;
 };
 
-
- 
-
 export default function RestaurantVendorUI({
   user,
   onLogout,
@@ -63,7 +61,7 @@ export default function RestaurantVendorUI({
   const token = localStorage.getItem("auth_token");
   const getUsername = () => 
   user?.username || localStorage.getItem("username") || "User";
-  // Helpers
+  
   const getRestaurantId = () =>
     user?.restaurantId || user?.user?.restaurantId || user?.restaurant_id || 1;
   const getUserRole = () =>
@@ -93,9 +91,7 @@ export default function RestaurantVendorUI({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [dockConnected, setDockConnected] = useState(false);
-  // Add this with your other refs/state
   const portRef = useRef(null);
-  // Admin State (Shared with POSView)
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({
     name: "",
@@ -112,13 +108,13 @@ export default function RestaurantVendorUI({
     role: "cashier",
   });
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  // POS Logic
   const [selectedToken, setSelectedToken] = useState("1");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [discount, setDiscount] = useState(0);
   const [taxRate] = useState(5);
-  const [settings, setSettings,] = useState({ upiId: "", payeeName: "",kitchenCapacity: 20 });
+  const [settings, setSettings] = useState({ upiId: "", payeeName: "", kitchenCapacity: 20 });
   const [activeUpiData, setActiveUpiData] = useState(null);
+  const [lowStock, setLowStock] = useState([]);
 
   const hasFetched = useRef(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -140,8 +136,8 @@ export default function RestaurantVendorUI({
           grouped[cat].push({
             id: Number(p.id),
             name: p.name,
-            price: p.price !== null ? Number(p.price) : 0, // ✅ Ensure Number
-            stock: p.stock !== null ? Number(p.stock) : 0, // ✅ Ensure Number
+            price: p.price !== null ? Number(p.price) : 0,
+            stock: p.stock !== null ? Number(p.stock) : 0,
             category: cat,
           });
         });
@@ -150,6 +146,18 @@ export default function RestaurantVendorUI({
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const fetchLowStock = async () => {
+    try {
+      const res = await apiRequest(`${API_URL}/dashboard/low-stock`);
+      if (res.ok) {
+        const data = await res.json();
+        setLowStock(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch low stock:", err);
     }
   };
 
@@ -168,7 +176,6 @@ export default function RestaurantVendorUI({
       if (res.ok) {
         const serverOrders = await res.json();
         if (Array.isArray(serverOrders)) {
-          // ✅ FIX: Strict filter for "active" status
           const activeOnly = serverOrders.filter(
             (o) => (o.status || "").toLowerCase() === "active"
           );
@@ -176,11 +183,9 @@ export default function RestaurantVendorUI({
           setOrders(
             activeOnly.map((o) => ({
               ...o,
-              // Use the actual backend keys
               startedAt: o.created_at || o.startedAt || Date.now(),
               paymentMethod: (o.payment_method || "cash").toLowerCase(),
               total: Number(o.total_amount || 0),
-              // Ensure items are mapped correctly so they don't show as empty on refresh
               items: (o.items || []).map(it => {
                 const product = rawProducts.find(p => p.id === it.product_id);
                 return {
@@ -196,6 +201,7 @@ export default function RestaurantVendorUI({
       console.error("Polling error:", e);
     }
   };
+  
   const fetchSalesHistory = useCallback(async (date) => {
     if (activeTab !== "dashboard") return;
   
@@ -210,28 +216,33 @@ export default function RestaurantVendorUI({
       console.error("Sales history fetch failed:", err);
       setSalesHistory([]);
     } finally {
-      // Add a slight delay so the user sees the transition
       setTimeout(() => setIsHistoryLoading(false), 300);
     }
-  }, [activeTab]); // Removed API_URL from deps if it's a constant to be safer
+  }, [activeTab]);
+  
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
     const load = async () => {
       await refreshProducts();
       await fetchActiveOrders();
+      await fetchLowStock();
       try {
         const sRes = await apiRequest(`${API_URL}/settings/`)
         if (sRes.ok) {
           const s = await sRes.json();
-          setSettings({ upiId: s.upi_id, payeeName: s.payee_name ,kitchenCapacity: s.kitchen_capacity || 20});
+          setSettings({ upiId: s.upi_id, payeeName: s.payee_name, kitchenCapacity: s.kitchen_capacity || 20});
         }
         if (userRole === "admin") await refreshUsers();
       } catch (e) {}
     };
     load();
     const interval = setInterval(fetchActiveOrders, 3000);
-    return () => clearInterval(interval);
+    const lowStockInterval = setInterval(fetchLowStock, 10000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(lowStockInterval);
+    };
   }, [token, API_URL, userRole]);
 
   useEffect(() => {
@@ -244,11 +255,9 @@ export default function RestaurantVendorUI({
     if (activeTab === "dashboard" && ["admin", "manager"].includes(userRole)) {
       fetchSalesHistory(reportDate);
     }
-  }, [activeTab, reportDate, userRole]);
+  }, [activeTab, reportDate, userRole, fetchSalesHistory]);
 
   // --- HANDLERS ---
-
-  // 1. ADD Product
   const handleAdminAddProduct = async (formData) => {
     try {
       const payload = {
@@ -277,7 +286,6 @@ export default function RestaurantVendorUI({
     }
   };
 
-  // 2. UPDATE Product (New Function for PUT Route)
   const handleAdminUpdateProduct = async (formData) => {
     try {
       const payload = {
@@ -348,7 +356,6 @@ export default function RestaurantVendorUI({
       const data = await res.json().catch(() => ({}));
   
       if (!res.ok) {
-        // ✅ Now alerts the actual error string
         alert(data.detail || "Failed to delete staff member");
         return;
       }
@@ -365,10 +372,7 @@ export default function RestaurantVendorUI({
       if ("serial" in navigator) {
         const port = await navigator.serial.requestPort();
         await port.open({ baudRate: 9600 });
-
-        // STORE THE PORT HERE
         portRef.current = port;
-
         setDockConnected(true);
         alert("✅ Dock Connected Successfully!");
       } else {
@@ -381,27 +385,21 @@ export default function RestaurantVendorUI({
   };
 
   const sendToDock = async (tokenNum) => {
-    // Check if port exists and is writable
     if (!dockConnected || !portRef.current || !portRef.current.writable) {
       alert("Dock not connected or not writable! Please connect dock.");
       return;
     }
 
-    // 1. Get the writer
     const writer = portRef.current.writable.getWriter();
 
     try {
-      // 2. Write the data
-
       console.log(`Sending Token ${tokenNum} to Dock...`);
-
       const data = new TextEncoder().encode(`${tokenNum}\n`);
       await writer.write(data);
     } catch (error) {
       console.error("Error writing to serial port:", error);
       alert("Failed to send to dock");
     } finally {
-      // 3. CRITICAL: Release the lock so the port can be used again later
       writer.releaseLock();
     }
   };
@@ -413,26 +411,19 @@ export default function RestaurantVendorUI({
     Math.max(0, cartSubtotal - discount) + taxAmount
   );
 
-  // Find this line in RestaurantVendorUI.jsx (around line 325)
-const availableTokens = useMemo(() => {
-  const used = orders.map((o) => String(o.token));
-  // ✅ Change length from 6 to 8
-  return Array.from({ length: 8 }, (_, i) => String(i + 1)).filter(
-    (t) => !used.includes(t)
-  );
-}, [orders]);
+  const availableTokens = useMemo(() => {
+    const used = orders.map((o) => String(o.token));
+    return Array.from({ length: 8 }, (_, i) => String(i + 1)).filter(
+      (t) => !used.includes(t)
+    );
+  }, [orders]);
 
-  // Only auto-switch if the CURRENT selected token is actually in use (invalid)
-  // or if no token is selected at all.
   useEffect(() => {
     if (availableTokens.length > 0) {
-      // If current selection is valid, DO NOTHING. Keep user selection.
       if (availableTokens.includes(selectedToken)) return;
-
-      // If current selection is invalid (used), pick the first available one.
       setSelectedToken(availableTokens[0]);
     }
-  }, [availableTokens, selectedToken]); // Keep dependencies the same
+  }, [availableTokens, selectedToken]);
 
   const addToCart = (item) =>
     setCart((p) => {
@@ -443,6 +434,7 @@ const availableTokens = useMemo(() => {
           )
         : [...p, { ...item, quantity: 1 }];
     });
+    
   const removeFromCart = (item) =>
     setCart((p) => {
       const f = p.find((i) => i.id === item.id);
@@ -453,34 +445,76 @@ const availableTokens = useMemo(() => {
       );
     });
 
-  // --- 1. FIXED: Handle the Checkout Button Click ---
-  const handleCheckoutClick = () => {
-    // FORCE a log to see if the function even fires
+  // ✅ FIXED: Handle checkout with inventory override support
+  const handleCheckoutClick = (orderData = null) => {
+    console.log("handleCheckoutClick called with:", orderData);
+    
     if (orders.length >= settings.kitchenCapacity) {
       const proceed = window.confirm(
         `⚠️ WARNING: Kitchen is at capacity (${orders.length}/${settings.kitchenCapacity}).\n\nPlacing this order may cause significant delays. Continue?`
       );
       if (!proceed) return;
     }
-    console.log("!!! handleCheckoutClick TRIGGERED !!!");
-    console.log("Current selectedToken:", selectedToken);
-    console.log("Dock Status:", dockConnected);
+    
     setActiveUpiData(null);
+    
     if (dockConnected && selectedToken) {
-      console.log(`Sending token ${selectedToken} to dock hardware...`);
       sendToDock(selectedToken);
-    } else {
-      console.warn("Signal not sent: Dock not connected or Token missing.");
     }
-
-    setShowCheckout(true);
+    
+    // Check if this is from POSView with inventory override data
+    if (orderData && typeof orderData === 'object' && orderData.override_missing_ingredients !== undefined) {
+      console.log("Processing inventory override order");
+      finalizeOrder(orderData);
+    } else {
+      console.log("Opening checkout modal");
+      setShowCheckout(true);
+    }
   };
 
-  // --- 2. FIXED: Handle the Database Save ---
+  // ✅ FIXED: Finalize order with proper override support
   const finalizeOrder = async (payData) => {
-    console.log("FINALIZE ORDER CALLED:", payData);
+    console.log("=== finalizeOrder called ===");
+    console.log("payData:", payData);
+    console.log("payData type:", typeof payData);
     
-    if (payData?.paymentMethod === "upi" && !activeUpiData) {
+    // Default values
+    let paymentMethod = "cash";
+    let isOverride = false;
+    let isConfirmed = false;
+    
+    // Parse payData correctly
+    if (payData) {
+      if (typeof payData === 'string') {
+        paymentMethod = payData;
+        console.log("Case: String payment method");
+      } else if (typeof payData === 'object') {
+        // Handle different object structures
+        if (payData.paymentMethod) {
+          paymentMethod = payData.paymentMethod;
+          console.log("Case: Object with paymentMethod");
+        } else if (payData.payment_method) {
+          paymentMethod = payData.payment_method;
+          console.log("Case: Object with payment_method");
+        }
+        
+        if (payData.override_missing_ingredients !== undefined) {
+          isOverride = payData.override_missing_ingredients;
+          console.log("Override flag detected:", isOverride);
+        }
+        
+        if (payData.confirmed !== undefined) {
+          isConfirmed = payData.confirmed;
+          console.log("Confirmed flag detected:", isConfirmed);
+        }
+      }
+    }
+    
+    console.log(`Parsed: paymentMethod=${paymentMethod}, isOverride=${isOverride}, isConfirmed=${isConfirmed}`);
+    
+    // Handle UPI QR code display
+    if (paymentMethod === "upi" && !isConfirmed) {
+      console.log("Showing UPI QR code...");
       const qrConfig = {
         pa: settings.upiId,
         pn: settings.payeeName,
@@ -490,58 +524,100 @@ const availableTokens = useMemo(() => {
       setActiveUpiData({ qr: qrUrl, payee: settings.payeeName });
       return;
     }
-
-    let method = typeof payData === "object" ? payData.paymentMethod : payData;
-    const tokenToSave = Number(selectedToken);
-    const localItems = cart.map(i => ({ name: i.name, quantity: i.quantity }));
-
+    
+    // Validate cart is not empty
+    if (cart.length === 0) {
+      alert("Cart is empty");
+      return;
+    }
+    
+    // Prepare items array - ensure all numbers are proper types
+    const items = cart.map((i) => ({
+      product_id: Number(i.id),
+      quantity: Number(i.quantity),
+      subtotal: Number(i.price * i.quantity)
+    }));
+    
+    // Prepare payload with correct types
     const payload = {
-      total_amount: grandTotal,
-      payment_method: method,
-      token: tokenToSave,
-      items: cart.map((i) => ({
-        product_id: i.id,
-        quantity: i.quantity,
-        subtotal: i.price * i.quantity
-      })),
+      total_amount: Number(grandTotal),
+      payment_method: paymentMethod,
+      token: Number(selectedToken),
+      items: items,
+      override_missing_ingredients: Boolean(isOverride)
     };
-  
+    
+    console.log("=== FINAL PAYLOAD TO BACKEND ===");
+    console.log(JSON.stringify(payload, null, 2));
+    
     try {
       const res = await apiRequest(`${API_URL}/orders/`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(payload),
       });
-  
-      const r = await res.json();
-      if (!res.ok) throw new Error(r.detail || "Order failed");
-  
-      if (method === "upi" && !payData.confirmed) {
-         const qrConfig = { pa: settings.upiId, pn: settings.payeeName, cu: "INR" };
-         const qrUrl = getUPIQR(qrConfig, grandTotal, tokenToSave, r.id);
-         setActiveUpiData({ qr: qrUrl });
-      } else {
-        // ✅ KITCHEN FIX: Use "active" status to match server-side polling filter
-        const newO = {
-          id: r.id,
-          token: tokenToSave,
-          items: localItems,
-          startedAt: new Date().toISOString(),
-          total: grandTotal,
-          status: "active", 
-        };
-  
-        setOrders((p) => [newO, ...p]);
-        
-        // ✅ STOCK FIX: Immediately trigger product refresh to update card counts
-        await refreshProducts();
-
-        setCart([]);
-        setDiscount(0);
-        setShowCheckout(false);
-        setActiveUpiData(null);
+      
+      const responseData = await res.json();
+      console.log("Backend response status:", res.status);
+      console.log("Backend response data:", responseData);
+      
+      if (!res.ok) {
+        // Show detailed validation errors
+        if (res.status === 422) {
+          console.error("Validation errors:", responseData);
+          const errors = responseData.detail || [];
+          if (Array.isArray(errors)) {
+            alert(`Validation Error:\n${errors.map(e => e.msg || JSON.stringify(e)).join('\n')}`);
+          } else {
+            alert(`Error: ${JSON.stringify(responseData)}`);
+          }
+        } else {
+          throw new Error(responseData.detail || "Order failed");
+        }
+        return;
       }
-    } catch (e) {
-      alert(e.message);
+      
+      // Success - continue with order completion
+      if (paymentMethod === "upi" && !isConfirmed) {
+        const qrConfig = { pa: settings.upiId, pn: settings.payeeName, cu: "INR" };
+        const qrUrl = getUPIQR(qrConfig, grandTotal, Number(selectedToken), responseData.id);
+        setActiveUpiData({ qr: qrUrl, orderId: responseData.id });
+        return;
+      }
+      
+      // Create local order object
+      const newOrder = {
+        id: responseData.id,
+        token: Number(selectedToken),
+        items: cart.map(i => ({ name: i.name, quantity: i.quantity })),
+        startedAt: new Date().toISOString(),
+        total: grandTotal,
+        status: "active",
+        missing_ingredients: responseData.missing_ingredients || []
+      };
+      
+      setOrders((prev) => [newOrder, ...prev]);
+      await refreshProducts();
+      await fetchLowStock();
+      
+      // Reset cart and UI
+      setCart([]);
+      setDiscount(0);
+      setShowCheckout(false);
+      setActiveUpiData(null);
+      
+      // Show warning if ingredients were missing
+      if (newOrder.missing_ingredients && newOrder.missing_ingredients.length > 0) {
+        alert(`⚠️ Order #${newOrder.token} placed with ${newOrder.missing_ingredients.length} missing ingredient(s). Please check inventory levels.`);
+      } else {
+        console.log("Order placed successfully!");
+      }
+      
+    } catch (error) {
+      console.error("Order creation failed:", error);
+      alert(error.message || "Failed to place order. Please try again.");
       setShowCheckout(false);
     }
   };
@@ -565,11 +641,12 @@ const availableTokens = useMemo(() => {
     }
   };
 
-  const handlePaymentSuccess = async(method) => {
+  const handlePaymentSuccess = async (method) => {
+    console.log("Payment success with method:", method);
     setCart([]);
     setDiscount(0);
     setActiveUpiData(null);
-    await finalizeOrder({ paymentMethod: method,confirmed: true });
+    await finalizeOrder({ paymentMethod: method, confirmed: true });
     setShowCheckout(false);
     setTimeout(fetchActiveOrders, 500);
   };
@@ -592,75 +669,42 @@ const availableTokens = useMemo(() => {
           </div>
           <nav className="flex items-center gap-1">
             {[
-            {
-              id: "dashboard",
-              icon: LayoutDashboard,
-              label: "Dashboard",
-              roles: ["admin", "manager"],
-            },
-            {
-              id: "pos",
-              icon: Coffee,
-              label: "MENU",
-              roles: ["cashier"],
-            },
-            {
-              id: "products",
-              icon: Box,
-              label: "Products",
-              roles: ["admin", "manager"],
-            },
-            {
-              id: "kitchen",
-              icon: Bell,
-              label: "Kitchen",
-              roles: ["cashier", "manager"],
-              action: () => setShowActiveOrders(true),
-              badge: orders.length,
-              isCritical: orders.length >= settings.kitchenCapacity
-            },
-            {
-              id: "users",
-              icon: User,
-              label: "Staff",
-              roles: ["admin","manager"],
-            },
-            {
-              id: "inventory",
-              icon: Box,
-              label: "Inventory",
-              roles: ["admin", "manager"],
-            },
-            {
-              id: "recipes",
-              icon: BookOpen,
-              label: "Recipes",
-              roles: ["admin","manager"]
-            }
-          ].map(
+              { id: "dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ["admin", "manager"] },
+              { id: "pos", icon: Coffee, label: "MENU", roles: ["cashier"] },
+              { id: "products", icon: Box, label: "Products", roles: ["admin", "manager"] },
+              { id: "kitchen", icon: Bell, label: "Kitchen", roles: ["cashier", "manager"], action: () => setShowActiveOrders(true), badge: orders.length, isCritical: orders.length >= settings.kitchenCapacity },
+              { id: "users", icon: User, label: "Staff", roles: ["admin","manager"] },
+              { id: "inventory", icon: Box, label: "Inventory", roles: ["admin", "manager"] },
+              { id: "recipes", icon: BookOpen, label: "Recipes", roles: ["admin","manager"] }
+            ].map(
               (item) =>
               (!item.roles || item.roles.includes(userRole)) && (
                 <button
-                key={item.id}
-                onClick={() => item.action ? item.action() : setActiveTab(item.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors relative
-                ${activeTab === item.id && !item.action ? `${theme.bg.active} ${theme.text.main}` : theme.button.ghost}
-                ${item.id === 'kitchen' && orders.length >= settings.kitchenCapacity ? 'text-red-500 animate-pulse bg-red-500/10' : ''}`}
-              >
-                <item.icon size={16} className={item.id === 'kitchen' && orders.length >= settings.kitchenCapacity ? 'text-red-500' : ''} />
-                <span>{item.label}</span>
-                {/* Update badge styling */}
-                {item.badge > 0 && (
-                  <span className={`${orders.length >= settings.kitchenCapacity ? 'bg-red-600' : 'bg-blue-600'} text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-                )
+                  key={item.id}
+                  onClick={() => item.action ? item.action() : setActiveTab(item.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors relative
+                    ${activeTab === item.id && !item.action ? `${theme.bg.active} ${theme.text.main}` : theme.button.ghost}
+                    ${item.id === 'kitchen' && orders.length >= settings.kitchenCapacity ? 'text-red-500 animate-pulse bg-red-500/10' : ''}`}
+                >
+                  <item.icon size={16} className={item.id === 'kitchen' && orders.length >= settings.kitchenCapacity ? 'text-red-500' : ''} />
+                  <span>{item.label}</span>
+                  {item.badge > 0 && (
+                    <span className={`${orders.length >= settings.kitchenCapacity ? 'bg-red-600' : 'bg-blue-600'} text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              )
             )}
           </nav>
         </div>
+        
+        {/* Right side navigation */}
         <div className="flex items-center gap-3">
+          {/* Low Stock Alert Bell */}
+          <LowStockAlert lowStock={lowStock} isDarkMode={isDarkMode} />
+          
+          {/* Dock Connect Button */}
           {userRole !== "admin" && (
             <button
               onClick={connectDock}
@@ -670,48 +714,36 @@ const availableTokens = useMemo(() => {
                   : `${theme.border.default} ${theme.button.ghost}`
               }`}
             >
-              <Wifi
-                size={16}
-                className={dockConnected ? "animate-pulse" : ""}
-              />
-              <span className="hidden sm:inline">
-                {dockConnected ? "Dock" : "Connect"}
-              </span>
+              <Wifi size={16} className={dockConnected ? "animate-pulse" : ""} />
+              <span className="hidden sm:inline">{dockConnected ? "Dock" : "Connect"}</span>
             </button>
           )}
-          <button
-            onClick={onToggleTheme}
-            className={`p-2 rounded-lg ${theme.button.ghost}`}
-          >
+          
+          {/* Theme Toggle */}
+          <button onClick={onToggleTheme} className={`p-2 rounded-lg ${theme.button.ghost}`}>
             {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          
+          {/* Admin Settings */}
           {userRole === "admin" && (
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className={`p-2 rounded-lg ${theme.button.ghost}`}
-            >
+            <button onClick={() => setSettingsOpen(true)} className={`p-2 rounded-lg ${theme.button.ghost}`}>
               <Settings size={18} />
             </button>
           )}
-          <div className="flex items-center gap-3">
+          
+          {/* User Profile */}
+          <div className="flex items-center gap-3 pl-2 border-l" style={{ borderColor: isDarkMode ? "rgba(255,255,240,0.1)" : "rgba(0,35,102,0.1)" }}>
             <div className="text-right hidden sm:block">
               <p className="text-sm font-medium">{displayName}</p>
-              <p
-                className={`text-xs uppercase font-medium tracking-wider ${theme.text.tertiary}`}
-              >
-                {userRole}
-              </p>
+              <p className={`text-xs uppercase font-medium tracking-wider ${theme.text.tertiary}`}>{userRole}</p>
             </div>
-            <div
-              className={`h-8 w-8 rounded-full flex items-center justify-center border ${theme.border.default} ${theme.bg.subtle}`}
-            >
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${theme.border.default} ${theme.bg.subtle}`}>
               <User size={16} className={theme.text.secondary} />
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className={`p-2 rounded-lg ${theme.button.ghost}`}
-          >
+          
+          {/* Logout */}
+          <button onClick={onLogout} className={`p-2 rounded-lg ${theme.button.ghost}`}>
             <LogOut size={18} />
           </button>
         </div>
@@ -720,200 +752,91 @@ const availableTokens = useMemo(() => {
       {/* Main Content */}
       <main className={`flex-1 flex flex-col overflow-hidden ${theme.bg.main}`}>
         <div className="flex-1 overflow-y-auto p-0 relative">
-        {activeTab === "dashboard" && ["admin","manager"].includes(userRole) && (
-  <div className="p-8">
-    <SalesReport
-      history={salesHistory}
-      reportDate={reportDate}
-      setReportDate={setReportDate}
-      fetchSalesHistory={fetchSalesHistory} // This triggers the API
-      isHistoryLoading={isHistoryLoading}
-      isDarkMode={isDarkMode}
-    />
-  </div>
-)}
+          {activeTab === "dashboard" && ["admin","manager"].includes(userRole) && (
+            <div className="p-8">
+              <SalesReport
+                history={salesHistory}
+                reportDate={reportDate}
+                setReportDate={setReportDate}
+                fetchSalesHistory={fetchSalesHistory}
+                isHistoryLoading={isHistoryLoading}
+                isDarkMode={isDarkMode}
+              />
+            </div>
+          )}
 
-        {activeTab === "dashboard" && userRole === "manager" && (
-          <div className="p-8">
-            <ManagerDashboard
+          {activeTab === "dashboard" && userRole === "manager" && (
+            <div className="p-8">
+              <ManagerDashboard
+                apiRequest={apiRequest}
+                isDarkMode={isDarkMode}
+                lowStock={lowStock}
+                setLowStock={setLowStock}
+              />
+            </div>
+          )}
+  
+          {activeTab === "pos" && userRole === "cashier" && (
+            <POSView
+              menu={menu}
+              categories={categories}
+              cart={cart}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+              availableTokens={availableTokens}
+              selectedToken={selectedToken}
+              onSetToken={setSelectedToken}
+              onAddToCart={addToCart}
+              onRemoveFromCart={removeFromCart}
+              onCheckout={handleCheckoutClick}
+              isDarkMode={isDarkMode}
+              discount={discount}
+              setDiscount={setDiscount}
+              taxRate={taxRate}
+            />
+          )}
+          
+          {activeTab === "products" && ["admin","manager"].includes(userRole) && (
+            <ProductManagement
+              rawProducts={rawProducts}
+              categories={categories}
+              isDarkMode={isDarkMode}
+              onAdd={handleAdminAddProduct}
+              onUpdate={handleAdminUpdateProduct}
+              onDelete={(id) => {
+                if (confirm("Delete?"))
+                  apiRequest(`${API_URL}/products/${id}`, {
+                    method: "DELETE",
+                  }).then(refreshProducts);
+              }}
+            />
+          )}
+          
+          {activeTab === "inventory" && ["admin","manager"].includes(userRole) && (
+            <InventoryManager
               apiRequest={apiRequest}
               isDarkMode={isDarkMode}
             />
-          </div>
-        )}
-  
-  {activeTab === "pos" && userRole === "cashier" && (
-  <POSView
-    menu={menu}
-    categories={categories}
-    cart={cart}
-    selectedCategory={selectedCategory}
-    setSelectedCategory={setSelectedCategory}
-    availableTokens={availableTokens}
-    selectedToken={selectedToken}
-    onSetToken={setSelectedToken}
-    onAddToCart={addToCart}
-    onRemoveFromCart={removeFromCart}
-    onCheckout={handleCheckoutClick}
-    isDarkMode={isDarkMode}
-    discount={discount}
-    setDiscount={setDiscount}
-    taxRate={taxRate}
-  />
-)}
-{activeTab === "products" && ["admin","manager"].includes(userRole) && (
-  <ProductManagement
-    rawProducts={rawProducts}
-    categories={categories}
-    isDarkMode={isDarkMode}
-    onAdd={handleAdminAddProduct}
-    onUpdate={handleAdminUpdateProduct}
-    onDelete={(id) => {
-      if (confirm("Delete?"))
-        apiRequest(`${API_URL}/products/${id}`, {
-          method: "DELETE",
-        }).then(refreshProducts);
-    }}
-  />
-)}
-          {activeTab === "inventory" && ["admin","manager"].includes(userRole) && (
-  <InventoryManager
-    apiRequest={apiRequest}
-    isDarkMode={isDarkMode}
-  />
-)}
-{activeTab === "recipes" && ["admin","manager"].includes(userRole) && (
-  <RecipeManager
-    apiRequest={apiRequest}
-    isDarkMode={isDarkMode}
-    products={rawProducts}
-  />
-)}
-          {activeTab === "users" && ["admin","manager"].includes(userRole) && (
-            
-            <div className="max-w-4xl mx-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h2 className="text-2xl font-semibold mb-8">Staff Management</h2>
-              <div
-                className={`p-6 rounded-lg border mb-8 ${COMMON_STYLES.card(
-                  isDarkMode
-                )}`}
-              >
-                <h3
-                  className={`text-sm font-semibold mb-4 flex items-center gap-2 ${theme.text.main}`}
-                >
-                  <Plus size={16} /> Add User
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                  <div className="col-span-1">
-                    <label
-                      className={`text-xs font-medium uppercase mb-1.5 block ${theme.text.secondary}`}
-                    >
-                      Username
-                    </label>
-                    <input
-                      className={`w-full ${COMMON_STYLES.input(isDarkMode)}`}
-                      value={newUser.username}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, username: e.target.value })
-                      }
-                      placeholder="john_doe"
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    <label
-                      className={`text-xs font-medium uppercase mb-1.5 block ${theme.text.secondary}`}
-                    >
-                      Email
-                    </label>
-                    <input
-                      className={`w-full ${COMMON_STYLES.input(isDarkMode)}`}
-                      value={newUser.email}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, email: e.target.value })
-                      }
-                      placeholder="email@pos.com"
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    <label
-                      className={`text-xs font-medium uppercase mb-1.5 block ${theme.text.secondary}`}
-                    >
-                      Password
-                    </label>
-                    <input
-                      className={`w-full ${COMMON_STYLES.input(isDarkMode)}`}
-                      type="password"
-                      value={newUser.password}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, password: e.target.value })
-                      }
-                      placeholder="••••"
-                    />
-                  </div>
-                  <div className="col-span-1 flex gap-2">
-                    <div className="flex-1">
-                      <label
-                        className={`text-xs font-medium uppercase mb-1.5 block ${theme.text.secondary}`}
-                      >
-                        Role
-                      </label>
-                      <select
-                        className={`w-full ${COMMON_STYLES.select(isDarkMode)}`}
-                        value={newUser.role}
-                        onChange={(e) =>
-                          setNewUser({ ...newUser, role: e.target.value })
-                        }
-                      >
-                        <option value="cashier">Cashier</option>
-                        <option value="manager">Manager</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </div>
-                    <button
-                      onClick={handleAdminAddUser}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors outline-none mt-auto ${theme.button.primary}`}
-                    >
-                      Create
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {usersList.map((u) => (
-        <div
-          key={u.id}
-          className={`p-5 rounded-lg border flex justify-between items-center group transition-colors ${COMMON_STYLES.card(isDarkMode)}`}
-        >
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-md ${theme.bg.subtle}`}>
-              <User size={20} />
-            </div>
-            <div>
-              <p className="font-medium text-sm">{u.username}</p>
-              <p className={`text-xs font-medium ${theme.text.tertiary}`}>{u.role}</p>
-              <p className={`text-xs ${theme.text.muted}`}>{u.email}</p>
-            </div>
-          </div>
+          )}
           
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-            <button
-              onClick={() => setEditingUser(u)}
-              className={`p-2 rounded-md hover:bg-blue-500/10 text-blue-500 transition-colors`}
-            >
-              <Settings size={18} />
-            </button>
-
-            <button
-              onClick={() => handleAdminDeleteUser(u.id)}
-              className={`p-2 rounded-md hover:bg-red-500/10 text-red-500 transition-colors`}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        </div>
-      ))}
-              </div>
-            </div>
+          {activeTab === "recipes" && ["admin","manager"].includes(userRole) && (
+            <RecipeManager
+              apiRequest={apiRequest}
+              isDarkMode={isDarkMode}
+              products={rawProducts}
+            />
+          )}
+          
+          {activeTab === "users" && ["admin","manager"].includes(userRole) && (
+            <StaffManager
+              isDarkMode={isDarkMode}
+              theme={theme}
+              currentUserRole={userRole}
+              usersList={usersList}
+              onAddUser={handleAdminAddUser}
+              onUpdateUser={handleAdminUpdateUser}
+              onDeleteUser={handleAdminDeleteUser}
+            />
           )}
         </div>
       </main>
@@ -947,12 +870,6 @@ const availableTokens = useMemo(() => {
           onClose={() => setSettingsOpen(false)}
           restaurantId={getRestaurantId()}
         />
-      )}
-      {/* ✅ INSERT THE EDIT MODAL CODE HERE */}
-      {editingUser && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-           {/* ... modal content ... */}
-        </div>
       )}
     </div>
   );
