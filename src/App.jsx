@@ -3,7 +3,7 @@ import RestaurantVendorUI from './components/ui/RestaurantVendorUI';
 import LoginView from './components/ui/LoginView'; // ✅ IMPORTED LOGIN VIEW
 
 // ✅ DYNAMIC BACKEND CONNECTION
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function App() {
   const [user, setUser] = useState(null);
