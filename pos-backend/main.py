@@ -4,8 +4,9 @@ import os
 
 # 1. Load the .env file IMMEDIATELY
 load_dotenv()
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.routers import auth, products, orders, settings_router
 from app.core.config import settings
 from app.routers import staff
@@ -14,24 +15,43 @@ from app.routers import recipes
 from app.routers import dashboard
 from app.db.base import Base
 from app.db.session import engine
+
 app = FastAPI(title="POS Backend - FastAPI")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://192.168.1.114:5173",
     "https://*.vercel.app"
 ]
-# Same CORS policy as Express app.use(cors())
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.1.114:5173",
+    "https://posspager.vercel.app",
+]
+
+# CORS middleware — handles pre-flight and successful responses
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://posspager.vercel.app"
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler — ensures CORS headers are present even on 500 errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin in ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers=headers,
+    )
 
 # Register Routers
 app.include_router(auth.router, prefix="/auth")
@@ -50,10 +70,6 @@ async def create_tables():
 @app.get("/")
 async def root():
     return {"message": "POS Backend Online"}
-@app.get("/")
-async def root():
-    # Preserving exact health check response
-    return {"message": "POS Backend Online"}
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=settings.PORT, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT, reload=True)

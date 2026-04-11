@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.future import select
 from sqlalchemy import text  # Required for raw SQL restaurant insertion
 from typing import List
@@ -67,26 +68,28 @@ async def restaurant_signup(
 
 # --- 2. PUBLIC: LOGIN ---
 @router.post("/login", response_model=Token)
-async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(
+    # Change UserLogin to OAuth2PasswordRequestForm
+    # This allows the 'Authorize' button to work
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: AsyncSession = Depends(get_db)
+):
+    # Note: form_data uses .username even if you are sending an email
+    print("LOGIN ATTEMPT:", form_data.username)
     
-    print("LOGIN ATTEMPT:", user_in.email)
-    """
-    Standard login for all roles (Admin, Manager, Cashier).
-    """
-    result = await db.execute(select(User).where(User.email == user_in.email))
+    result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalars().first()
-    print("DB QUERY EMAIL:", user_in.email)
 
-    if not user or not verify_password(user_in.password, user.password):
+    if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     access_token = create_access_token(subject=user.email)
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user": user
     }
-
 
 # --- 3. PROTECTED: ADMIN ONLY STAFF CREATION ---
 @router.post("/create-user", response_model=UserBase)

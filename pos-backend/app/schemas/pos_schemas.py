@@ -1,13 +1,19 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
-from pydantic import BaseModel, Field # Import Field
+
 # --- AUTH SCHEMAS ---
 class UserBase(BaseModel):
     username: str
     email: EmailStr
-    role: str = "cashier || manager || admin"
+    role: str
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -24,17 +30,26 @@ class Token(BaseModel):
 # --- PRODUCT SCHEMAS ---
 class ProductBase(BaseModel):
     name: str
-    price: float = Field(..., ge=0, description="Price cannot be negative")
-    stock: int = Field(default=0, ge=0, description="Stock cannot be negative")
+    price: float = Field(..., ge=0)
+    stock: int = Field(default=0, ge=0)
     category: str
+    image_url: Optional[str] = None
 
-# This is what the Router was looking for
-class ProductCreate(ProductBase):
-    pass
+class ProductCreate(BaseModel):
+    name: str
+    price: float
+    category: str
+    stock: int
+    image_url: Optional[str] = None
 
-class ProductResponse(ProductBase):
+class ProductResponse(BaseModel):
     id: int
-
+    name: str
+    price: float
+    category: str
+    stock: int
+    image_url: Optional[str] = None
+    
     class Config:
         from_attributes = True
 
@@ -47,8 +62,9 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     total_amount: Decimal
     payment_method: str  # upi, cash, card
-    token:int
+    token: int
     items: List[OrderItemCreate]
+    override_missing_ingredients: bool = False  # ✅ ADD THIS FIELD
 
 class OrderResponse(BaseModel):
     id: int
@@ -58,11 +74,27 @@ class OrderResponse(BaseModel):
     status: str
     created_at: datetime
     token: Optional[str]
+    missing_ingredients: Optional[List[int]] = None  # ✅ ADD THIS FIELD
 
     class Config:
         from_attributes = True
 
-# --- SETTINGS SCHEMAS ---
+# ✅ NEW SCHEMA: For missing ingredients check response
+class MissingIngredientCheck(BaseModel):
+    product_id: int
+    product_name: str
+    ingredient_id: int
+    ingredient_name: str
+    required_quantity: float
+    available_stock: int
+    shortfall: float
+    unit: str
+
+class InventoryCheckResponse(BaseModel):
+    can_fulfill: bool
+    missing_items: List[MissingIngredientCheck]
+
+# --- SETTINGS & INVENTORY SCHEMAS ---
 class SettingUpdate(BaseModel):
     key_name: str
     value: str
@@ -70,8 +102,8 @@ class SettingUpdate(BaseModel):
 class IngredientCreate(BaseModel):
     name: str
     unit: str
-    current_stock: int = Field(default=0, ge=0, description="Stock cannot be negative")
-    min_stock: int = Field(default=0, ge=0, description="Minimum stock cannot be negative")
+    current_stock: int = Field(default=0, ge=0)
+    min_stock: int = Field(default=0, ge=0)
 
 class IngredientResponse(BaseModel):
     id: int
@@ -86,22 +118,13 @@ class IngredientResponse(BaseModel):
 class RecipeCreate(BaseModel):
     product_id: int
     ingredient_id: int
-    quantity_required: float = Field(..., gt=0, description="Quantity must be greater than zero")
-
+    quantity_required: float = Field(..., gt=0)
 
 class RecipeResponse(BaseModel):
     id: int
     product_id: int
     ingredient_id: int
-    quantity_required: int
+    quantity_required: float
 
     class Config:
         from_attributes = True
-        
-# Add this to app/schemas/pos_schemas.py
-
-class UserUpdate(BaseModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    role: Optional[str] = None
-    password: Optional[str] = None # Optional: allows changing passwords

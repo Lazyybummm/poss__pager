@@ -1,367 +1,532 @@
-import React, { useMemo, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Edit2,
-  ImageIcon,
-  Plus,
-  Search,
-  Tag,
-  Trash2,
-  X,
-} from "lucide-react";
-import { COMMON_STYLES, FONTS, getTheme } from "./theme";
+import React, { useState, useEffect, useMemo } from "react";
 
-const PLACEHOLDER_IMG = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80";
+const API_URL = import.meta.env?.VITE_API_URL || "http://localhost:8000";
+const PEXELS_KEY = "4KhEPzhCIsWZkFGJRUzECgdCw7UZOwQ8fNUrHf1430S2AiM2A8yAHyIS";
 
-function StatCard({ label, value, sub, isDarkMode, theme }) {
+const ls = { getToken: () => localStorage.getItem("auth_token") };
+
+const stockStatus = (qty) =>
+  qty === 0
+    ? { color: "#ff6b6b", bg: "rgba(255,107,107,0.12)", label: "Sold Out" }
+    : qty <= 10
+    ? { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", label: "Low Stock" }
+    : { color: "#4ade80", bg: "rgba(74,222,128,0.12)", label: "In Stock" };
+
+// ── Icons ────────────────────────────────────────────────────────────────────
+const EditIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+  </svg>
+);
+const TrashIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+const SearchIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+const PackageIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+  </svg>
+);
+
+// ── Product Row ───────────────────────────────────────────────────────────────
+function ProductRow({ product, onDelete, onEdit, isLast }) {
+  const status = stockStatus(product.stock ?? 0);
+  const [hovering, setHovering] = useState(false);
+
+
   return (
-    <div className={`${COMMON_STYLES.card(isDarkMode)} p-5 flex flex-col gap-3 shadow-sm`}>
-      <span className={`text-xs font-semibold uppercase tracking-widest ${theme.text.tertiary}`}>{label}</span>
-      <div>
-        <p className={`text-3xl font-black tracking-tight ${theme.text.main}`}>{value}</p>
-        {sub && <p className={`text-xs mt-0.5 ${theme.text.muted}`}>{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
-function ProductCard({ product, onEdit, onDelete, isDarkMode, theme }) {
-  const lowStock = product.stock <= 5;
-
-  return (
-    <div className={`group rounded-2xl overflow-hidden border transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${COMMON_STYLES.card(isDarkMode)}`}>
-      <div className="relative h-44 overflow-hidden">
-        <img
-          src={product.image || PLACEHOLDER_IMG}
-          alt={product.name}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          onError={(e) => {
-            e.target.src = PLACEHOLDER_IMG;
-          }}
-        />
-        <span className={`absolute top-3 left-3 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm ${theme.bg.subtle} text-[#FFFFF0] ${theme.border.default}`}>
-          {product.category}
-        </span>
-        {lowStock && (
-          <span className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-sm flex items-center gap-1 ${theme.bg.subtle} ${theme.text.highlight} ${theme.border.default}`}>
-            <AlertTriangle size={9} />
-            Low stock
-          </span>
+    <div
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        padding: "1rem 1.5rem",
+        borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.04)",
+        background: hovering ? "rgba(177,197,255,0.03)" : "transparent",
+        transition: "background 0.15s ease",
+        gap: "1rem",
+      }}
+    >
+      {/* Thumbnail */}
+      <div style={{
+        width: "3rem", height: "3rem", borderRadius: "0.6rem",
+        overflow: "hidden", flexShrink: 0,
+        background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#333" }}>
+            <PackageIcon />
+          </div>
         )}
-        <div className="absolute bottom-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0">
-          <button
-            onClick={() => onEdit(product)}
-            className={`w-8 h-8 rounded-lg backdrop-blur-sm border flex items-center justify-center transition-colors ${theme.button.icon}`}
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            onClick={() => onDelete(product.id)}
-            className={`w-8 h-8 rounded-lg backdrop-blur-sm border flex items-center justify-center transition-colors ${theme.button.icon}`}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
       </div>
 
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className={`font-bold text-base leading-tight ${theme.text.main}`}>{product.name}</p>
-          <p className={`font-black text-lg shrink-0 ${theme.text.highlight}`}>₹{product.price}</p>
-        </div>
+      {/* Name + category */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#f0f0f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {product.name}
+        </p>
+        <p style={{ margin: "0.15rem 0 0", fontSize: "0.72rem", color: "#555", fontWeight: 500 }}>
+          {product.category}
+        </p>
+      </div>
 
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${theme.text.tertiary}`}>Stock</span>
-            <span className={`text-xs font-bold ${lowStock ? theme.text.highlight : theme.text.secondary}`}>
-              {product.stock} units
-            </span>
-          </div>
-          <div className={`h-1.5 rounded-full overflow-hidden ${isDarkMode ? "bg-[#1a1a1a]" : "bg-neutral-100"}`}>
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${theme.bg.subtle}`}
-              style={{ width: `${Math.min((product.stock / 50) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
+      {/* Price */}
+      <div style={{ width: "6rem", textAlign: "right" }}>
+        <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#b1c5ff", fontVariantNumeric: "tabular-nums" }}>
+          ₹{Number(product.price).toLocaleString("en-IN")}
+        </span>
+      </div>
+
+      {/* Stock badge */}
+      <div style={{ width: "8rem", display: "flex", justifyContent: "center" }}>
+        <span style={{
+          background: status.bg, color: status.color,
+          padding: "0.25rem 0.75rem", borderRadius: "9999px",
+          fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.02em",
+          whiteSpace: "nowrap",
+        }}>
+          {status.label} · {product.stock}
+        </span>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+        <button
+          onClick={() => onEdit(product)}
+          title="Edit"
+          style={{
+            width: "2.1rem", height: "2.1rem",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(177,197,255,0.07)", border: "1px solid rgba(177,197,255,0.12)",
+            borderRadius: "0.5rem", cursor: "pointer", color: "#b1c5ff",
+            transition: "background 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(177,197,255,0.15)"; e.currentTarget.style.borderColor = "rgba(177,197,255,0.25)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "rgba(177,197,255,0.07)"; e.currentTarget.style.borderColor = "rgba(177,197,255,0.12)"; }}
+        >
+          <EditIcon />
+        </button>
+        <button
+          onClick={() => onDelete(product.id)}
+          title="Delete"
+          style={{
+            width: "2.1rem", height: "2.1rem",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(255,107,107,0.07)", border: "1px solid rgba(255,107,107,0.12)",
+            borderRadius: "0.5rem", cursor: "pointer", color: "#ff6b6b",
+            transition: "background 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,107,107,0.15)"; e.currentTarget.style.borderColor = "rgba(255,107,107,0.25)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,107,107,0.07)"; e.currentTarget.style.borderColor = "rgba(255,107,107,0.12)"; }}
+        >
+          <TrashIcon />
+        </button>
       </div>
     </div>
   );
 }
 
-export default function ProductManagement({
-  rawProducts,
-  categories,
-  isDarkMode,
-  onAdd,
-  onUpdate,
-  onDelete,
-}) {
-  const theme = getTheme(isDarkMode);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filterCat, setFilterCat] = useState("all");
-  const [form, setForm] = useState({
-    id: null,
-    name: "",
-    price: "",
-    stock: "",
-    category: "",
-    image: "",
-  });
-
-  const resetForm = () => {
-    setForm({ id: null, name: "", price: "", stock: "", category: "", image: "" });
-    setPanelOpen(false);
-    setIsEditing(false);
-  };
-
-  const handleSubmit = async () => {
-    if (!form.name || form.price === "" || !form.category) {
-      alert("Fill required fields");
-      return;
-    }
-
-    const priceNum = parseFloat(form.price);
-    const stockNum = parseInt(form.stock);
-
-    if (isNaN(priceNum) || priceNum < 0) {
-      alert("Price cannot be negative");
-      return;
-    }
-    if (isNaN(stockNum) || stockNum < 0) {
-      alert("Stock cannot be negative");
-      return;
-    }
-
-    if (isEditing) await onUpdate(form);
-    else await onAdd(form);
-
-    resetForm();
-  };
-
-  const startEdit = (product) => {
-    setForm({
-      id: product.id,
-      name: product.name || "",
-      price: product.price !== undefined && product.price !== null ? product.price.toString() : "",
-      stock: product.stock !== undefined && product.stock !== null ? product.stock.toString() : "0",
-      category: product.category || "",
-      image: product.image || "",
-    });
-    setIsEditing(true);
-    setPanelOpen(true);
-  };
-
-  const filtered = useMemo(() => {
-    return rawProducts.filter((product) => {
-      const matchSearch = product.name.toLowerCase().includes(search.toLowerCase());
-      const matchCat = filterCat === "all" || product.category === filterCat;
-      return matchSearch && matchCat;
-    });
-  }, [rawProducts, search, filterCat]);
-
-  const uniqueCats = [...new Set(rawProducts.map((product) => product.category))].length;
-
-  const Field = ({ label, children }) => (
-    <div>
-      <label className={`text-[10px] font-bold uppercase tracking-widest block mb-1.5 ${theme.text.tertiary}`}>
-        {label}
-      </label>
-      {children}
-    </div>
+// ── Product Modal ─────────────────────────────────────────────────────────────
+// ── Product Modal (Updated with Auto-Selection) ─────────────────────────────────────────────
+function ProductModal({ onClose, onSave, editingProduct = null }) {
+  const [form, setForm] = useState(
+    editingProduct
+      ? { name: editingProduct.name, price: editingProduct.price, category: editingProduct.category, stock: editingProduct.stock }
+      : { name: "", price: "", category: "Main Course", stock: 100 }
   );
+  const [query, setQuery] = useState("");
+  const [images, setImages] = useState([]);
+  const [selected, setSelected] = useState(
+    editingProduct
+      ? { src: { large: editingProduct.image_url, medium: editingProduct.image_url }, id: "preset" }
+      : null
+  );
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const inputCls = COMMON_STYLES.input(isDarkMode);
-  const selectCls = COMMON_STYLES.select(isDarkMode);
+  // New Logic: Auto-select the first image for new products
+  const searchImages = async (autoSelect = false) => {
+    const searchQuery = autoSelect ? form.name : query;
+    if (!searchQuery.trim()) return;
+
+    setSearching(true);
+    try {
+      const res = await fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(searchQuery)}&per_page=6&orientation=landscape`, {
+        headers: { Authorization: PEXELS_KEY },
+      });
+      const data = await res.json();
+      const photos = data.photos || [];
+      setImages(photos);
+
+      // Automatically pick the top choice if creating a new product
+      if (!editingProduct && photos.length > 0) {
+        setSelected(photos[0]);
+      }
+    } catch (err) {
+      console.error("Pexels Search Error:", err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!selected || !form.name || !form.price) return;
+    setSaving(true);
+    try {
+      const token = ls.getToken();
+      const method = editingProduct ? "PUT" : "POST";
+      const endpoint = editingProduct ? `${API_URL}/products/${editingProduct.id}` : `${API_URL}/products/`;
+      const res = await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ 
+            ...form, 
+            price: parseFloat(form.price), 
+            stock: parseInt(form.stock), 
+            image_url: selected.src.large 
+        }),
+      });
+      if (!res.ok) throw new Error();
+      onSave(await res.json(), !!editingProduct);
+      onClose();
+    } catch { 
+      alert("Failed to save. Please try again."); 
+    } finally { 
+      setSaving(false); 
+    }
+  };
+
+  const inp = {
+    width: "100%", background: "#0d0d0d",
+    border: "1px solid rgba(255,255,255,0.07)", color: "#e8e8e8",
+    padding: "0.75rem 1rem", borderRadius: "0.6rem", outline: "none",
+    fontSize: "0.85rem", boxSizing: "border-box", fontFamily: "inherit",
+    transition: "border-color 0.15s",
+  };
+  const lbl = { fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#555", display: "block", marginBottom: "0.4rem" };
 
   return (
-    <div className={`min-h-screen relative ${theme.bg.main} ${theme.text.main}`} style={{ fontFamily: FONTS.sans }}>
-      <div className="max-w-7xl mx-auto px-6 py-8 lg:px-8">
-        <div className="flex items-end justify-between gap-4 mb-8">
-          <div>
-            <p className={`text-xs font-bold uppercase tracking-[0.2em] mb-1 ${theme.text.tertiary}`}>Restaurant POS</p>
-            <h1 className={`text-4xl font-black tracking-tight ${theme.text.main}`}>Menu Items</h1>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", backdropFilter: "blur(12px)", padding: "1rem" }}>
+      <div style={{
+        background: "#0f0f0f", width: "100%", maxWidth: "52rem",
+        display: "flex", borderRadius: "1rem", overflow: "hidden",
+        border: "1px solid rgba(255,255,255,0.07)",
+        boxShadow: "0 40px 80px rgba(0,0,0,0.6)",
+        maxHeight: "90vh",
+      }}>
+        {/* Left — form */}
+        <div style={{ flex: 1, padding: "2.5rem", display: "flex", flexDirection: "column", gap: "1.1rem", overflowY: "auto" }}>
+          <div style={{ paddingBottom: "1.25rem", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "0.25rem" }}>
+            <h2 style={{ color: "#f0f0f0", margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
+              {editingProduct ? "Edit Product" : "Add Product"}
+            </h2>
+            <p style={{ color: "#444", margin: "0.25rem 0 0", fontSize: "0.75rem" }}>
+              {editingProduct ? "Manual override enabled for image" : "Image will be auto-selected based on name"}
+            </p>
           </div>
-          <button
-            onClick={() => {
-              setIsEditing(false);
-              setForm({ id: null, name: "", price: "", stock: "", category: "", image: "" });
-              setPanelOpen(true);
-            }}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold ${theme.button.primary} ${theme.ring(isDarkMode)} transition-all hover:scale-105 active:scale-95`}
-          >
-            <Plus size={16} />
-            New Item
-          </button>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <StatCard label="Total Items" value={rawProducts.length} sub="in menu" isDarkMode={isDarkMode} theme={theme} />
-          <StatCard label="Categories" value={uniqueCats} sub="distinct" isDarkMode={isDarkMode} theme={theme} />
-        </div>
-
-        <div className="flex flex-wrap gap-3 mb-6">
-          <div className={`flex items-center gap-2 rounded-xl px-3 py-2.5 border flex-1 min-w-45 ${COMMON_STYLES.card(isDarkMode)}`}>
-            <Search size={14} className={theme.text.tertiary} />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search items…"
-              className={`bg-transparent text-sm outline-none flex-1 ${theme.text.main} ${theme.text.placeholder}`}
+          <div>
+            <label style={lbl}>Product Name</label>
+            <input 
+              type="text" 
+              placeholder="e.g. Truffle Pasta" 
+              value={form.name}
+              onChange={e => {
+                setForm({ ...form, name: e.target.value });
+                // Update search query as they type so they can see alternatives
+                if (!editingProduct) setQuery(e.target.value);
+              }} 
+              style={inp}
+              onFocus={e => (e.target.style.borderColor = "rgba(177,197,255,0.35)")}
+              // Trigger auto-select when they finish typing the name
+              onBlur={e => {
+                e.target.style.borderColor = "rgba(255,255,255,0.07)";
+                if (!editingProduct && form.name) searchImages(true);
+              }} 
             />
           </div>
 
-          <div className={`relative flex items-center rounded-xl border px-3 py-2.5 gap-2 ${COMMON_STYLES.card(isDarkMode)}`}>
-            <Tag size={14} className={theme.text.highlight} />
-            <select
-              value={filterCat}
-              onChange={(e) => setFilterCat(e.target.value)}
-              className="bg-black text-[#FFFFF0] text-sm outline-none pr-4 appearance-none"
-            >
-              <option value="all">All Categories</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            <div>
+              <label style={lbl}>Price (₹)</label>
+              <input type="number" placeholder="0.00" value={form.price}
+                onChange={e => setForm({ ...form, price: e.target.value })} style={inp} />
+            </div>
+            <div>
+              <label style={lbl}>Initial Stock</label>
+              <input type="number" placeholder="100" value={form.stock}
+                onChange={e => setForm({ ...form, stock: e.target.value })} style={inp} />
+            </div>
+          </div>
+
+          <div>
+            <label style={lbl}>Category</label>
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+              style={{ ...inp, cursor: "pointer" }}>
+              {["Starters", "Main Course", "Desserts", "Beverages", "Wine & Spirits", "Chef's Specials"].map(c => (
+                <option key={c}>{c}</option>
               ))}
             </select>
-            <ChevronDown size={13} className={`absolute right-3 pointer-events-none ${theme.text.tertiary}`} />
           </div>
 
-          <div className={`px-4 py-2.5 rounded-xl border text-sm font-medium ${COMMON_STYLES.card(isDarkMode)} ${theme.text.secondary}`}>
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-          {filtered.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onEdit={startEdit}
-              onDelete={onDelete}
-              isDarkMode={isDarkMode}
-              theme={theme}
-            />
-          ))}
-
-          {filtered.length === 0 && (
-            <div className={`col-span-full text-center py-20 rounded-2xl border border-dashed ${theme.border.default} ${theme.text.secondary}`}>
-              <ImageIcon size={32} className={`mx-auto mb-3 ${theme.text.muted}`} />
-              <p className="font-semibold">No items found</p>
-              <p className="text-xs mt-1">Try a different search or category</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {panelOpen && <div className={`fixed inset-0 ${theme.bg.overlay} z-40`} onClick={resetForm} />}
-
-      <div
-        className={`fixed top-0 right-0 h-full w-full max-w-md z-50 flex flex-col ${COMMON_STYLES.modal(isDarkMode)} transition-transform duration-300 ease-out ${
-          panelOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
-        <div className={`flex items-center justify-between p-6 border-b ${theme.border.default}`}>
           <div>
-            <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.text.tertiary}`}>{isEditing ? "Edit Item" : "New Item"}</p>
-            <h3 className={`text-xl font-black ${theme.text.main}`}>{isEditing ? form.name || "Edit Product" : "Add to Menu"}</h3>
-          </div>
-          <button onClick={resetForm} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${theme.button.icon}`}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div className={`relative h-48 rounded-2xl overflow-hidden border ${theme.border.default}`}>
-            <img
-              src={form.image || PLACEHOLDER_IMG}
-              alt="preview"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.target.src = PLACEHOLDER_IMG;
-              }}
-            />
-            <div className={`absolute inset-0 ${theme.bg.overlay}`} />
-            <div className="absolute bottom-3 left-3 right-3">
-              <Field label="Image URL (optional)">
-                <input
-                  value={form.image}
-                  onChange={(e) => setForm({ ...form, image: e.target.value })}
-                  placeholder="https://…"
-                  className={`${inputCls} bg-transparent ${theme.text.main}`}
-                />
-              </Field>
+            <label style={{ ...lbl, color: "#5a7fd4" }}>
+                {editingProduct ? "Current Photo (Click right to change)" : "Auto-Selected Photo"}
+            </label>
+            <div style={{
+              height: "8rem", borderRadius: "0.6rem", overflow: "hidden",
+              background: "#0a0a0a", border: `1px solid ${selected ? "rgba(177,197,255,0.2)" : "rgba(255,255,255,0.06)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              position: "relative"
+            }}>
+              {selected ? (
+                <>
+                    <img src={selected.src.medium} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    {searching && (
+                        <div style={{position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem'}}>Searching...</div>
+                    )}
+                </>
+              ) : (
+                <span style={{ color: "#2a2a2a", fontSize: "0.75rem", fontWeight: 600 }}>
+                    {searching ? "Finding best match..." : "Waiting for product name..."}
+                </span>
+              )}
             </div>
           </div>
 
-          <Field label="Item Name *">
-            <input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Paneer Tikka"
-              className={inputCls}
-            />
-          </Field>
+          <div style={{ marginTop: "auto", display: "flex", gap: "0.75rem" }}>
+            <button onClick={onClose} style={{ flex: 1, padding: "0.8rem", borderRadius: "0.6rem", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", color: "#555", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600 }}>Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={!form.name || !form.price || !selected || saving}
+              style={{
+                flex: 2, padding: "0.8rem", borderRadius: "0.6rem", border: "none",
+                background: form.name && form.price && selected ? "#3b5bdb" : "#1a1a1a",
+                color: form.name && form.price && selected ? "#fff" : "#333",
+                cursor: form.name && form.price && selected ? "pointer" : "not-allowed",
+                fontSize: "0.85rem", fontWeight: 700, transition: "background 0.2s",
+              }}
+            >
+              {saving ? "Saving…" : editingProduct ? "Update Product" : "Create Product"}
+            </button>
+          </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Price (₹) *">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                placeholder="0.00"
-                className={inputCls}
-              />
-            </Field>
-
-            <Field label="Stock *">
-              <input
-                type="number"
-                min="0"
-                value={form.stock}
-                onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                placeholder="0"
-                className={inputCls}
-              />
-            </Field>
+        {/* Right — Manual Search (For Editing or Overriding) */}
+        <div style={{ flex: 1, background: "#080808", padding: "2.5rem", borderLeft: "1px solid rgba(255,255,255,0.04)", display: "flex", flexDirection: "column", gap: "1rem", overflowY: "auto" }}>
+          <div>
+            <label style={lbl}>Search Alternatives</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div style={{ flex: 1, position: "relative" }}>
+                <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#444" }}>
+                  <SearchIcon />
+                </span>
+                <input
+                  type="text" placeholder="pasta, steak, wine..."
+                  value={query} onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && searchImages(false)}
+                  style={{ ...inp, paddingLeft: "2.25rem" }}
+                />
+              </div>
+              <button onClick={() => searchImages(false)} style={{ padding: "0 1rem", background: "#1a2a5e", border: "1px solid rgba(177,197,255,0.15)", borderRadius: "0.6rem", color: "#b1c5ff", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700 }}>
+                Search
+              </button>
+            </div>
           </div>
 
-          <Field label="Category *">
-            <input
-              list="cat-opts"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              placeholder="e.g. Starters"
-              className={selectCls}
-            />
-            <datalist id="cat-opts">
-              {categories.map((category) => (
-                <option key={category} value={category} />
-              ))}
-            </datalist>
-          </Field>
-        </div>
-
-        <div className={`p-6 border-t flex gap-3 ${theme.border.default}`}>
-          <button onClick={resetForm} className={`flex-1 py-3 rounded-xl text-sm font-bold transition-colors ${theme.button.secondary}`}>
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={parseFloat(form.price) < 0 || parseInt(form.stock) < 0 || !form.name || !form.category}
-            className={`flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${theme.button.primary} hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:grayscale disabled:hover:scale-100`}
-          >
-            {isEditing ? <Check size={15} /> : <Plus size={15} />}
-            {isEditing ? "Update Item" : "Add to Menu"}
-          </button>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+            {images.map(img => (
+              <div
+                key={img.id}
+                onClick={() => setSelected(img)}
+                style={{
+                  aspectRatio: "4/3", borderRadius: "0.5rem", overflow: "hidden",
+                  cursor: "pointer", border: selected?.id === img.id ? "2px solid #3b5bdb" : "2px solid transparent",
+                  transition: "all 0.15s", opacity: selected && selected.id !== img.id ? 0.45 : 1,
+                }}
+              >
+                <img src={img.src.medium} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </div>
+            ))}
+            {!searching && !images.length && (
+              <p style={{ gridColumn: "span 2", color: "#2a2a2a", fontSize: "0.72rem", textAlign: "center", padding: "2rem 0", lineHeight: 1.8 }}>
+                Use the search bar above to<br />find a different image.
+              </p>
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Products Page ─────────────────────────────────────────────────────────────
+export default function ProductsPage() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalMode, setModalMode] = useState({ open: false, product: null });
+  const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState("All");
+
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const token = ls.getToken();
+        const res = await fetch(`${API_URL}/products/`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    };
+    fetch_();
+  }, []);
+
+  const handleSave = (updated, isEdit) => {
+    setProducts(prev => isEdit ? prev.map(p => p.id === updated.id ? updated : p) : [updated, ...prev]);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Remove this product from the menu?")) return;
+    const token = ls.getToken();
+    await fetch(`${API_URL}/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const categories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))];
+
+  const filtered = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
+    const matchCat = filterCategory === "All" || p.category === filterCategory;
+    return matchSearch && matchCat;
+  });
+
+  return (
+    <div style={{ padding: "2.5rem 2.5rem", maxWidth: "72rem", margin: "0 auto", minHeight: "100vh", fontFamily: "inherit" }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem" }}>
+        <div>
+          <h1 style={{ color: "#f0f0f0", margin: 0, fontSize: "1.6rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
+            Product Management
+          </h1>
+          <p style={{ color: "#444", marginTop: "0.3rem", fontSize: "0.8rem", fontWeight: 500 }}>
+            Total Products: <span style={{ color: "#6b7fc4" }}>{products.length}</span>
+          </p>
+        </div>
+        <button
+          onClick={() => setModalMode({ open: true, product: null })}
+          style={{
+            background: "#3b5bdb", color: "#fff", padding: "0.65rem 1.25rem",
+            borderRadius: "0.6rem", border: "none", fontWeight: 700, cursor: "pointer",
+            fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.4rem",
+            letterSpacing: "0.01em",
+          }}
+        >
+          + Add Product
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        {/* Search */}
+        <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "280px" }}>
+          <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "#333" }}>
+            <SearchIcon />
+          </span>
+          <input
+            type="text" placeholder="Search products…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            style={{
+              width: "100%", background: "#0d0d0d", border: "1px solid rgba(255,255,255,0.07)",
+              color: "#e0e0e0", padding: "0.6rem 0.875rem 0.6rem 2.25rem",
+              borderRadius: "0.6rem", outline: "none", fontSize: "0.82rem", boxSizing: "border-box",
+              transition: "border-color 0.15s", fontFamily: "inherit",
+            }}
+            onFocus={e => (e.target.style.borderColor = "rgba(177,197,255,0.3)")}
+            onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.07)")}
+          />
+        </div>
+
+        {/* Category pills */}
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {categories.map(c => (
+            <button
+              key={c}
+              onClick={() => setFilterCategory(c)}
+              style={{
+                padding: "0.4rem 0.9rem", borderRadius: "9999px",
+                border: "1px solid",
+                borderColor: filterCategory === c ? "#3b5bdb" : "rgba(255,255,255,0.08)",
+                background: filterCategory === c ? "rgba(59,91,219,0.15)" : "transparent",
+                color: filterCategory === c ? "#b1c5ff" : "#555",
+                fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div style={{
+        display: "flex", alignItems: "center", padding: "0.6rem 1.5rem",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        marginBottom: "0.25rem",
+      }}>
+        <div style={{ flex: 1, fontSize: "0.65rem", fontWeight: 700, color: "#3a3a3a", textTransform: "uppercase", letterSpacing: "0.1em", paddingLeft: "4rem" }}>
+          Product
+        </div>
+        <div style={{ width: "6rem", textAlign: "right", fontSize: "0.65rem", fontWeight: 700, color: "#3a3a3a", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          Price
+        </div>
+        <div style={{ width: "8rem", textAlign: "center", fontSize: "0.65rem", fontWeight: 700, color: "#3a3a3a", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          Stock
+        </div>
+        <div style={{ width: "5.5rem" }} />
+      </div>
+
+      {/* Product list */}
+      <div style={{ background: "#0d0d0d", borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.05)", overflow: "hidden" }}>
+        {loading ? (
+          <div style={{ padding: "3rem", textAlign: "center", color: "#2a2a2a", fontSize: "0.82rem", fontWeight: 600 }}>
+            Loading products…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: "3rem", textAlign: "center", color: "#2a2a2a", fontSize: "0.82rem", fontWeight: 600 }}>
+            No products found
+          </div>
+        ) : (
+          filtered.map((p, i) => (
+            <ProductRow
+              key={p.id}
+              product={p}
+              onDelete={handleDelete}
+              onEdit={(prod) => setModalMode({ open: true, product: prod })}
+              isLast={i === filtered.length - 1}
+            />
+          ))
+        )}
+      </div>
+
+      {modalMode.open && (
+        <ProductModal
+          editingProduct={modalMode.product}
+          onClose={() => setModalMode({ open: false, product: null })}
+          onSave={handleSave}
+        />
+      )}
     </div>
   );
 }

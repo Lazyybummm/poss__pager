@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import RestaurantVendorUI from './components/ui/RestaurantVendorUI';
-import LoginView from './components/ui/LoginView'; // ✅ IMPORTED LOGIN VIEW
+import LoginView from './components/ui/LoginView';
 
 // ✅ DYNAMIC BACKEND CONNECTION
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
@@ -8,6 +8,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 export default function App() {
   const [user, setUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [lowStock, setLowStock] = useState([]); // ✅ ADD THIS STATE
 
   // 1. Check for Session on Load
   useEffect(() => {
@@ -18,7 +19,7 @@ export default function App() {
       console.log(`✅ Connected to Backend: ${API_URL}`);
       setUser({ 
         role: savedRole || "cashier", 
-        username: savedName || "User", // ✅ Restore name here
+        username: savedName || "User",
         token 
       });
     }
@@ -26,16 +27,13 @@ export default function App() {
 
   // 2. Handle Login Success (Called by LoginView)
   const handleLoginSuccess = (userData, token) => {
-    // ✅ FIX: Extract name from userData
     const userName = userData?.username || "Admin"; 
     const userRole = userData?.role || "cashier";
     
-    // Save to LocalStorage
     localStorage.setItem("auth_token", token);
     localStorage.setItem("user_role", userRole);
-    localStorage.setItem("username", userName); // ✅ Use the correct variable
+    localStorage.setItem("username", userName);
     
-    // Update State
     setUser({ ...userData, username: userName, token });
   };
 
@@ -45,9 +43,8 @@ export default function App() {
     localStorage.removeItem("user_role");
     localStorage.removeItem("username");
     setUser(null);
+    setLowStock([]); // ✅ Clear lowStock on logout
   };
-
-  // --- RENDER ---
 
   // If Logged In: Show Main POS UI
   if (user) {
@@ -57,7 +54,9 @@ export default function App() {
         onLogout={handleLogout} 
         isDarkMode={isDarkMode}
         onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-        API_URL={API_URL} 
+        API_URL={API_URL}
+        lowStock={lowStock}           // ✅ PASS lowStock DOWN
+        setLowStock={setLowStock}     // ✅ PASS setLowStock DOWN
       />
     );
   }

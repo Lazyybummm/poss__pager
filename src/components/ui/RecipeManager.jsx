@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { getTheme, COMMON_STYLES } from "./theme";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function RecipeManager({ apiRequest, isDarkMode, products }) {
   const theme = getTheme(isDarkMode);
