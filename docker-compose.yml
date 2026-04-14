@@ -12,6 +12,7 @@ services:
       MYSQL_PASSWORD: your_secure_password
     volumes:
       - db_data:/var/lib/mysql
+      # Path adjusted to the backend subdirectory
       - ./pos-backend/pos_db.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - poss_pager_network
@@ -22,6 +23,7 @@ services:
       interval: 10s
 
   backend:
+    # Context points to the backend folder containing the Dockerfile
     build: ./pos-backend
     container_name: poss_pager_backend
     restart: always
@@ -31,9 +33,7 @@ services:
       DB_USER: root
       DB_PASSWORD: your_secure_password
       DB_NAME: poss_pager
-      # Use the Public IP here for the backend's internal reference if needed
       API_URL: 187.127.139.208:8002
-      # This env var can be used in your main.py to set CORS dynamically
       ALLOWED_ORIGINS: "http://187.127.139.208:5173"
     depends_on:
       db:
@@ -45,9 +45,9 @@ services:
 
   frontend:
     build: 
-      context: .
+      # Context points to the React project folder containing package.json
+      context: ./poss__pager
       args:
-        # Vite builds the static files with this IP hardcoded for API calls
         - VITE_API_URL=http://187.127.139.208:8002
     container_name: poss_pager_frontend
     restart: always
