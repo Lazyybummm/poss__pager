@@ -14,7 +14,6 @@ services:
     networks:
       - poss_pager_network
     healthcheck:
-      # Simplified healthcheck using mysqladmin ping
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-pyour_secure_password"]
       timeout: 10s
       retries: 5
@@ -33,7 +32,7 @@ services:
       DB_PASSWORD: your_secure_password
       DB_NAME: poss_pager
       API_URL: 187.127.139.208:8002
-      ALLOWED_ORIGINS: "http://187.127.139.208:5173"
+      ALLOWED_ORIGINS: "http://187.127.139.208" # Updated origin to match port 80
     depends_on:
       db:
         condition: service_healthy
@@ -54,7 +53,7 @@ services:
     networks:
       - poss_pager_network
     ports:
-      - "5173:5173"
+      - "80:5173" # Maps VPS port 80 (Standard Web) to Container port 5173
 
 volumes:
   db_data:
