@@ -16,18 +16,18 @@ from app.db.base import Base
 from app.db.session import engine
 
 app = FastAPI(title="POS Backend - FastAPI")
-
+ALLOWED_ORIGINS = allowed_origins_env.split(",")
 # Updated CORS origins
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:80",
-    "http://127.0.0.1:80",
-    "http://192.168.1.114:5173",
-    "https://posspager.vercel.app",
-]
+# ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     "http://localhost:80",
+#     "http://127.0.0.1:80",
+#     "http://192.168.1.114:5173",
+#     "https://posspager.vercel.app",
+# ]
 
 # FIXED: Changed ALLOWED_ORIGINS to allow_origins (lowercase)
 app.add_middleware(
