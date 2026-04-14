@@ -1,25 +1,35 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 class Settings(BaseSettings):
     # Database fields
-    DB_USER: str = "root"
-    DB_PASSWORD: str = ""
-    DB_HOST: str = "127.0.0.1"
-    DB_PORT: int = 3306
-    DB_NAME: str = "poss_pager"
+    DB_USER: str
+    DB_PASSWORD: str 
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
     
     # Auth & URL
-    JWT_SECRET: str = "supersecretkey"
-    DATABASE_URL: str = ""
+    JWT_SECRET: str 
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    DATABASE_URL: Optional[str] = None 
 
-    # Hardware/Serial fields - ADD THIS!
-    PREFERRED_PORT: str = "/dev/cu.usbserial-0001" # Default for Mac
-    PORT: int = 8000 # Adding this since main.py uses settings.PORT
+    # Hardware/Serial fields
+    PREFERRED_PORT: str = "/dev/cu.usbserial-0001"
+    PORT: int = 8000
     BAUD_RATE: int = 115200
-    model_config = ConfigDict(
+
+    # Pydantic V2 Configuration Style
+    model_config = SettingsConfigDict(
         env_file=".env",
+        env_file_encoding='utf-8',
+        case_sensitive=False,
         extra="ignore"
     )
 
 settings = Settings()
+
+# Construct DATABASE_URL after settings are loaded
+if not settings.DATABASE_URL:
+    settings.DATABASE_URL = f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"

@@ -8,7 +8,8 @@ DATABASE_URL = f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{set
 engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    # ADD THIS SECTION BELOW:
+    pool_size=10,
+    max_overflow=20,
     connect_args={
         "auth_plugin": "caching_sha2_password"
     }
@@ -25,6 +26,8 @@ async def get_db():
         try:
             yield session
             await session.commit()
-        except:
+        except Exception:
             await session.rollback()
             raise
+        finally:
+            await session.close()
