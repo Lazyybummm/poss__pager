@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:8.0
@@ -12,7 +10,6 @@ services:
       MYSQL_PASSWORD: your_secure_password
     volumes:
       - db_data:/var/lib/mysql
-      # Path adjusted to the backend subdirectory
       - ./pos-backend/pos_db.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - poss_pager_network
@@ -23,7 +20,6 @@ services:
       interval: 10s
 
   backend:
-    # Context points to the backend folder containing the Dockerfile
     build: ./pos-backend
     container_name: poss_pager_backend
     restart: always
@@ -45,8 +41,7 @@ services:
 
   frontend:
     build: 
-      # Context points to the React project folder containing package.json
-      context: ./poss__pager
+      context: .
       args:
         - VITE_API_URL=http://187.127.139.208:8002
     container_name: poss_pager_frontend
@@ -64,3 +59,5 @@ volumes:
 networks:
   poss_pager_network:
     driver: bridge
+
+    
