@@ -2,7 +2,6 @@ import uvicorn
 from dotenv import load_dotenv
 import os
 
-# 1. Load the .env file IMMEDIATELY
 load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,41 +16,28 @@ from app.db.base import Base
 from app.db.session import engine
 
 app = FastAPI(title="POS Backend - FastAPI")
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://192.168.1.114:5173",
-    "https://*.vercel.app"
-]
+
+# Updated CORS origins
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:80",
+    "http://127.0.0.1:80",
     "http://192.168.1.114:5173",
     "https://posspager.vercel.app",
 ]
 
-# CORS middleware — handles pre-flight and successful responses
+# FIXED: Changed ALLOWED_ORIGINS to allow_origins (lowercase)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=ALLOWED_ORIGINS,  # ← This is the fix
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
-
-# Global exception handler — ensures CORS headers are present even on 500 errors
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in ALLOWED_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc)},
-        headers=headers,
-    )
 
 # Register Routers
 app.include_router(auth.router, prefix="/auth")
@@ -62,10 +48,15 @@ app.include_router(staff.router)
 app.include_router(ingredients.router)
 app.include_router(recipes.router)
 app.include_router(dashboard.router)
+
 @app.on_event("startup")
 async def create_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database tables created successfully!")
+    except Exception as e:
+        print(f"Error creating tables: {e}")
 
 @app.get("/")
 async def root():

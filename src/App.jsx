@@ -2,13 +2,18 @@ import React, { useState, useEffect } from 'react';
 import RestaurantVendorUI from './components/ui/RestaurantVendorUI';
 import LoginView from './components/ui/LoginView';
 
-// ✅ DYNAMIC BACKEND CONNECTION
+// ✅ DYNAMIC BACKEND CONNECTION - Use environment variable with fallback
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [lowStock, setLowStock] = useState([]); // ✅ ADD THIS STATE
+  const [lowStock, setLowStock] = useState([]);
+
+  // Log the API URL for debugging
+  useEffect(() => {
+    console.log(`🔌 Backend API URL: ${API_URL}`);
+  }, []);
 
   // 1. Check for Session on Load
   useEffect(() => {
@@ -43,7 +48,7 @@ export default function App() {
     localStorage.removeItem("user_role");
     localStorage.removeItem("username");
     setUser(null);
-    setLowStock([]); // ✅ Clear lowStock on logout
+    setLowStock([]);
   };
 
   // If Logged In: Show Main POS UI
@@ -55,8 +60,8 @@ export default function App() {
         isDarkMode={isDarkMode}
         onToggleTheme={() => setIsDarkMode(!isDarkMode)}
         API_URL={API_URL}
-        lowStock={lowStock}           // ✅ PASS lowStock DOWN
-        setLowStock={setLowStock}     // ✅ PASS setLowStock DOWN
+        lowStock={lowStock}
+        setLowStock={setLowStock}
       />
     );
   }

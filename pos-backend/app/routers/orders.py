@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import select as sa_select
-from typing import List, Dict, Tuple
-from datetime import datetime, time, date
-from sqlalchemy import func
+from typing import List
+from datetime import datetime, time
 from app.db.session import get_db
 from app.models.pos_models import (
     Order,
@@ -43,7 +41,7 @@ async def get_orders(
 
 
 # ---------------------------------------------------------
-# ✅ NEW: CHECK INVENTORY BEFORE ORDER (for modal)
+# CHECK INVENTORY BEFORE ORDER
 # ---------------------------------------------------------
 @router.post("/check-inventory", response_model=InventoryCheckResponse)
 async def check_inventory(
@@ -51,16 +49,11 @@ async def check_inventory(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Check if all ingredients are available for this order.
-    Returns missing items if any, otherwise confirms can_fulfill = True.
-    """
     missing_items = []
     
     try:
         product_ids = [item.product_id for item in order_in.items]
         
-        # Fetch products
         product_result = await db.execute(
             select(Product).where(
                 Product.id.in_(product_ids),
@@ -72,62 +65,78 @@ async def check_inventory(
         if len(products) != len(product_ids):
             raise HTTPException(status_code=404, detail="One or more products not found")
         
-        # Check each product's recipe
         for item in order_in.items:
-            product = products[item.product_id]
+            product = products.get(item.product_id)
             
-            # Fetch recipe for this product
+            if not product:
+                missing_items.append(MissingIngredientCheck(
+                    product_id=item.product_id,
+                    product_name=f"Product ID {item.product_id}",
+                    ingredient_id=0,
+                    ingredient_name="Unknown",
+                    required_quantity=0,
+                    available_stock=0,
+                    shortfall=0,
+                    unit=""
+                ))
+                continue
+            
+            if product.stock is not None and product.stock < item.quantity:
+                missing_items.append(MissingIngredientCheck(
+                    product_id=product.id,
+                    product_name=product.name,
+                    ingredient_id=0,
+                    ingredient_name="Product Stock",
+                    required_quantity=item.quantity,
+                    available_stock=product.stock,
+                    shortfall=item.quantity - product.stock,
+                    unit="units"
+                ))
+            
             recipe_result = await db.execute(
                 select(Recipe).where(Recipe.product_id == item.product_id)
             )
             recipes = recipe_result.scalars().all()
             
-            if not recipes:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"No recipe defined for {product.name}"
+            if recipes:
+                ingredient_ids = [r.ingredient_id for r in recipes]
+                ingredient_result = await db.execute(
+                    select(Ingredient).where(
+                        Ingredient.id.in_(ingredient_ids),
+                        Ingredient.restaurant_id == current_user.restaurant_id
+                    )
                 )
-            
-            # Fetch ingredients
-            ingredient_ids = [r.ingredient_id for r in recipes]
-            ingredient_result = await db.execute(
-                select(Ingredient).where(
-                    Ingredient.id.in_(ingredient_ids),
-                    Ingredient.restaurant_id == current_user.restaurant_id
-                )
-            )
-            ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
-            
-            # Check each ingredient
-            for recipe in recipes:
-                ingredient = ingredients.get(recipe.ingredient_id)
+                ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
                 
-                if not ingredient:
-                    missing_items.append(MissingIngredientCheck(
-                        product_id=product.id,
-                        product_name=product.name,
-                        ingredient_id=recipe.ingredient_id,
-                        ingredient_name=f"Ingredient ID {recipe.ingredient_id}",
-                        required_quantity=recipe.quantity_required * item.quantity,
-                        available_stock=0,
-                        shortfall=recipe.quantity_required * item.quantity,
-                        unit="units"
-                    ))
-                    continue
-                
-                required_qty = recipe.quantity_required * item.quantity
-                
-                if ingredient.current_stock < required_qty:
-                    missing_items.append(MissingIngredientCheck(
-                        product_id=product.id,
-                        product_name=product.name,
-                        ingredient_id=ingredient.id,
-                        ingredient_name=ingredient.name,
-                        required_quantity=required_qty,
-                        available_stock=ingredient.current_stock,
-                        shortfall=required_qty - ingredient.current_stock,
-                        unit=ingredient.unit
-                    ))
+                for recipe in recipes:
+                    ingredient = ingredients.get(recipe.ingredient_id)
+                    
+                    if not ingredient:
+                        missing_items.append(MissingIngredientCheck(
+                            product_id=product.id,
+                            product_name=product.name,
+                            ingredient_id=recipe.ingredient_id,
+                            ingredient_name=f"Ingredient ID {recipe.ingredient_id}",
+                            required_quantity=recipe.quantity_required * item.quantity,
+                            available_stock=0,
+                            shortfall=recipe.quantity_required * item.quantity,
+                            unit="units"
+                        ))
+                        continue
+                    
+                    required_qty = recipe.quantity_required * item.quantity
+                    
+                    if ingredient.current_stock < required_qty:
+                        missing_items.append(MissingIngredientCheck(
+                            product_id=product.id,
+                            product_name=product.name,
+                            ingredient_id=ingredient.id,
+                            ingredient_name=ingredient.name,
+                            required_quantity=required_qty,
+                            available_stock=ingredient.current_stock,
+                            shortfall=required_qty - ingredient.current_stock,
+                            unit=ingredient.unit
+                        ))
         
         return InventoryCheckResponse(
             can_fulfill=len(missing_items) == 0,
@@ -144,7 +153,7 @@ async def check_inventory(
 
 
 # ---------------------------------------------------------
-# ✅ UPDATED: CREATE ORDER WITH INVENTORY OVERRIDE
+# CREATE ORDER WITH INVENTORY OVERRIDE - FIXED
 # ---------------------------------------------------------
 @router.post("/", response_model=OrderResponse)
 async def create_order(
@@ -153,12 +162,9 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    missing_ingredient_ids = []  # Track missing ingredients for this order
+    missing_ingredient_ids = []
     
     try:
-        # -------------------------------------------------
-        # VALIDATE PRODUCTS IN BULK
-        # -------------------------------------------------
         product_ids = [item.product_id for item in order_in.items]
         product_result = await db.execute(
             select(Product).where(
@@ -171,89 +177,79 @@ async def create_order(
         if len(products) != len(product_ids):
             raise HTTPException(status_code=404, detail="One or more products not found")
         
-        # -------------------------------------------------
-        # FIRST: CHECK ALL INGREDIENTS AND COLLECT MISSING IDs
-        # -------------------------------------------------
         for item in order_in.items:
             product = products[item.product_id]
             
-            # Check product stock
+            # ✅ FIX: Store product.id as integer, NOT string
             if product.stock < item.quantity:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Not enough stock for {product.name}"
-                )
+                if not order_in.override_missing_ingredients:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Not enough stock for {product.name}. Available: {product.stock}, Required: {item.quantity}"
+                    )
+                missing_ingredient_ids.append(product.id)  # ✅ Integer, not string
             
-            # Fetch recipe
             recipe_result = await db.execute(
                 select(Recipe).where(Recipe.product_id == item.product_id)
             )
             recipes = recipe_result.scalars().all()
             
-            if not recipes:
+            if not recipes and not order_in.override_missing_ingredients:
                 raise HTTPException(
                     status_code=400,
                     detail=f"No recipe defined for {product.name}"
                 )
             
-            # Fetch ingredients
-            ingredient_ids = [r.ingredient_id for r in recipes]
-            ingredient_result = await db.execute(
-                select(Ingredient).where(
-                    Ingredient.id.in_(ingredient_ids),
-                    Ingredient.restaurant_id == current_user.restaurant_id
+            if recipes:
+                ingredient_ids = [r.ingredient_id for r in recipes]
+                ingredient_result = await db.execute(
+                    select(Ingredient).where(
+                        Ingredient.id.in_(ingredient_ids),
+                        Ingredient.restaurant_id == current_user.restaurant_id
+                    )
                 )
-            )
-            ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
-            
-            # Check each ingredient
-            for recipe in recipes:
-                ingredient = ingredients.get(recipe.ingredient_id)
+                ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
                 
-                if not ingredient:
-                    missing_ingredient_ids.append(recipe.ingredient_id)
-                    continue
-                
-                required_qty = recipe.quantity_required * item.quantity
-                
-                if ingredient.current_stock < required_qty:
-                    missing_ingredient_ids.append(ingredient.id)
+                for recipe in recipes:
+                    ingredient = ingredients.get(recipe.ingredient_id)
                     
-                    # If NOT overriding, raise error BEFORE creating order
-                    if not order_in.override_missing_ingredients:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Not enough {ingredient.name} in stock. Required: {required_qty} {ingredient.unit}, Available: {ingredient.current_stock} {ingredient.unit}"
-                        )
+                    if not ingredient:
+                        missing_ingredient_ids.append(recipe.ingredient_id)
+                        continue
+                    
+                    required_qty = recipe.quantity_required * item.quantity
+                    
+                    if ingredient.current_stock < required_qty:
+                        missing_ingredient_ids.append(ingredient.id)
+                        
+                        if not order_in.override_missing_ingredients:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Not enough {ingredient.name} in stock. Required: {required_qty} {ingredient.unit}, Available: {ingredient.current_stock} {ingredient.unit}"
+                            )
         
-        # Remove duplicates from missing IDs
         unique_missing_ids = list(set(missing_ingredient_ids))
         
-        # -------------------------------------------------
-        # CREATE ORDER WITH CORRECT missing_ingredients FROM THE START
-        # -------------------------------------------------
         new_order = Order(
             total_amount=order_in.total_amount,
             payment_method=order_in.payment_method,
             token=str(order_in.token),
             status="active",
             restaurant_id=current_user.restaurant_id,
-            missing_ingredients=unique_missing_ids  # ✅ Set correctly at creation time
+            missing_ingredients=unique_missing_ids  # ✅ Now only integers
         )
         
         db.add(new_order)
-        await db.flush()  # get order.id
+        await db.flush()
         
-        # -------------------------------------------------
-        # NOW DEDUCT STOCKS (only after order is created)
-        # -------------------------------------------------
         for item in order_in.items:
             product = products[item.product_id]
             
-            # Deduct product stock
-            product.stock -= item.quantity
+            if product.stock >= item.quantity:
+                product.stock -= item.quantity
+            else:
+                product.stock = 0
             
-            # Create order item
             order_item = OrderItem(
                 order_id=new_order.id,
                 product_id=item.product_id,
@@ -262,38 +258,32 @@ async def create_order(
             )
             db.add(order_item)
             
-            # Fetch recipe again (or reuse from above - store in a dict)
             recipe_result = await db.execute(
                 select(Recipe).where(Recipe.product_id == item.product_id)
             )
             recipes = recipe_result.scalars().all()
             
-            ingredient_ids = [r.ingredient_id for r in recipes]
-            ingredient_result = await db.execute(
-                select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
-            )
-            ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
-            
-            # Deduct ingredient stocks (only if sufficient)
-            for recipe in recipes:
-                ingredient = ingredients.get(recipe.ingredient_id)
-                if ingredient:
-                    required_qty = recipe.quantity_required * item.quantity
-                    if ingredient.current_stock >= required_qty:
-                        ingredient.current_stock -= required_qty
-                    # If insufficient and override is true, we skip deduction (already tracked)
+            if recipes:
+                ingredient_ids = [r.ingredient_id for r in recipes]
+                ingredient_result = await db.execute(
+                    select(Ingredient).where(Ingredient.id.in_(ingredient_ids))
+                )
+                ingredients = {ing.id: ing for ing in ingredient_result.scalars().all()}
+                
+                for recipe in recipes:
+                    ingredient = ingredients.get(recipe.ingredient_id)
+                    if ingredient:
+                        required_qty = recipe.quantity_required * item.quantity
+                        if ingredient.current_stock >= required_qty:
+                            ingredient.current_stock -= required_qty
+                        else:
+                            ingredient.current_stock = 0
         
-        # -------------------------------------------------
-        # COMMIT EVERYTHING
-        # -------------------------------------------------
         await db.commit()
         await db.refresh(new_order)
         
-        print(f"✅ Order {new_order.id} created with missing_ingredients: {new_order.missing_ingredients}")
+        print(f"✅ Order {new_order.id} created. Override: {order_in.override_missing_ingredients}, Missing: {new_order.missing_ingredients}")
         
-        # -------------------------------------------------
-        # TRIGGER HARDWARE (non-blocking)
-        # -------------------------------------------------
         background_tasks.add_task(
             serial_bus.send_token,
             str(order_in.token)

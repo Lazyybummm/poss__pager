@@ -1,14 +1,7 @@
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
-
-    model_config = ConfigDict(
-        env_file=".env"
-    )
-
     # Database fields
     DB_USER: str
     DB_PASSWORD: str 
@@ -22,20 +15,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     DATABASE_URL: Optional[str] = None 
 
-    # Hardware/Serial fields - ADD THIS!
-    PREFERRED_PORT: str = "/dev/cu.usbserial-0001" # Default for Mac
-    PORT: int = 8000 # Adding this since main.py uses settings.PORT
+    # Hardware/Serial fields
+    PREFERRED_PORT: str = "/dev/cu.usbserial-0001"
+    PORT: int = 8000
     BAUD_RATE: int = 115200
-
-    
-    DB_USER: str
-    DB_PASSWORD: str
-    DB_NAME: str
-
-
-    # Server Config
-    PORT: int = 3000
-    
 
     # Pydantic V2 Configuration Style
     model_config = SettingsConfigDict(
@@ -45,5 +28,8 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-# This will now correctly load your .env file from the root folder
 settings = Settings()
+
+# Construct DATABASE_URL after settings are loaded
+if not settings.DATABASE_URL:
+    settings.DATABASE_URL = f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"

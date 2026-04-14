@@ -1,27 +1,90 @@
-import React, { useState, useMemo } from "react";
-import { Search, Plus, Minus, ShoppingCart, Box, AlertTriangle, X, CheckCircle } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Search, Plus, Minus, ShoppingCart, ArrowRight, X, Loader, AlertCircle, Info, Trash2 } from "lucide-react";
 import { getTheme, COMMON_STYLES, FONTS } from "./theme";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Internal lightweight placeholder aligned with Level 2 Surface
+const PlaceholderImg = () => (
+  <div className="w-full h-full bg-[#121a23] flex items-center justify-center">
+    <div className="w-4 h-4 border border-[#3d4958]/20 rotate-45" />
+  </div>
+);
 
-const apiRequest = async (url, options = {}) => {
-  const token = localStorage.getItem("auth_token");
-  const cleanUrl = url.replace(/([^:]\/)\/+/g, "$1");
+// Product Card Component with Minimalist Indicators
+const ProductCard = ({ product, qty, onAddToCart, onRemoveFromCart, isDarkMode, userRole, theme }) => {
+  const isCashier = userRole === "cashier";
+  const hasNoRecipe = !product.has_recipe;
+  const hasLowIngredients = product.ingredients_below_threshold === true;
   
-  const headers = {
-    "Content-Type": "application/json",
-    ...options.headers,
-    Authorization: `Bearer ${token}`,
-  };
-  
-  const response = await fetch(cleanUrl, { ...options, headers });
-  
-  if (response.status === 401) {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("user_role");
-    window.location.reload();
-  }
-  return response;
+  return (
+    <div 
+      className={`flex flex-col sm:flex-row p-2 gap-2 cursor-pointer group active:scale-[0.98] ${COMMON_STYLES.card(isDarkMode)} ${theme.bg.card} ${theme.bg.hover} relative`}
+      onClick={() => onAddToCart(product)}
+    >
+      {/* Image & Qty */}
+      <div className="flex flex-row sm:flex-col items-center justify-between sm:justify-start gap-2 w-full sm:w-10 md:w-12 shrink-0 relative">
+        <div className={`w-10 h-10 md:w-12 md:h-12 shrink-0 overflow-hidden relative rounded-sm ${theme.bg.subtle}`}>
+          {(product.image_url || product.image) ? (
+            <img 
+              alt={product.name} 
+              loading="lazy" 
+              className="w-full h-full object-cover grayscale-[0.3] group-hover:grayscale-0" 
+              src={product.image_url || product.image} 
+            />
+          ) : <PlaceholderImg />}
+          {qty > 0 && <div className="absolute inset-0 border-2 border-[#c0c1ff]/50 pointer-events-none" />}
+        </div>
+        
+        {/* Quantity Controls */}
+        <div className="flex items-center justify-between w-[70px] sm:w-full px-0.5">
+          <button onClick={(e) => { e.stopPropagation(); onRemoveFromCart(product); }} className={`flex items-center justify-center p-1 sm:p-0 ${theme.text.muted} hover:${theme.text.main}`}>
+            <Minus size={12} />
+          </button>
+          <span className={`text-[10px] font-bold ${qty > 0 ? theme.text.primary : theme.text.main}`}>{qty}</span>
+          <button onClick={(e) => { e.stopPropagation(); onAddToCart(product); }} className={`flex items-center justify-center p-1 sm:p-0 ${theme.text.muted} hover:${theme.text.main}`}>
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="flex flex-col justify-start overflow-hidden text-left w-full py-0.5">
+        <div className="flex items-center justify-between gap-1">
+          <span className={`text-[8px] font-bold uppercase tracking-[0.05em] mb-0.5 ${theme.text.muted}`}>{product.category}</span>
+          
+          {/* Minimalist Status Indicators Row */}
+          <div className="flex items-center gap-1.5">
+            {/* 🔴 RED DOT - No Recipe (Only for Cashier) */}
+            {isCashier && hasNoRecipe && (
+              <div className="relative group/dot">
+                <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm shadow-red-500/50"></div>
+                <div className="absolute right-0 top-4 opacity-0 invisible group-hover/dot:opacity-100 group-hover/dot:visible transition-all duration-200 z-50 pointer-events-none">
+                  <div className="bg-gray-900 text-white text-[9px] font-medium rounded-md px-2 py-1 whitespace-nowrap shadow-lg border border-gray-700">
+                    <div className="absolute -top-1 right-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                    ⚠️ Recipe not defined
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 🟡 YELLOW DOT - Ingredients Below Threshold */}
+            {hasLowIngredients && (
+              <div className="relative group/dot">
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/50 animate-pulse"></div>
+                <div className="absolute right-0 top-4 opacity-0 invisible group-hover/dot:opacity-100 group-hover/dot:visible transition-all duration-200 z-50 pointer-events-none">
+                  <div className="bg-gray-900 text-white text-[9px] font-medium rounded-md px-2 py-1 whitespace-nowrap shadow-lg border border-gray-700">
+                    <div className="absolute -top-1 right-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                    ⚠️ Some ingredients below threshold
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <h3 className={`font-bold text-[10px] md:text-[11px] leading-tight line-clamp-2 ${theme.text.main}`}>{product.name}</h3>
+        <p className={`text-[10px] md:text-[11px] font-mono font-bold mt-auto pt-1 ${theme.text.main}`}>₹{product.price}</p>
+      </div>
+    </div>
+  );
 };
 
 export default function POSView({
@@ -37,139 +100,215 @@ export default function POSView({
   onRemoveFromCart,
   onCheckout,
   isDarkMode,
-  discount,
+  discount = 0,
   setDiscount,
-  taxRate,
+  taxRate = 5,
+  userRole,
 }) {
   const theme = getTheme(isDarkMode);
   const [search, setSearch] = useState("");
-  
-  // ✅ NEW: State for inventory check modal
-  const [showInventoryModal, setShowInventoryModal] = useState(false);
-  const [missingItems, setMissingItems] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isPOSScreen, setIsPOSScreen] = useState(false);
+
+  // Inventory Check State
   const [isCheckingInventory, setIsCheckingInventory] = useState(false);
-  const [pendingOrderData, setPendingOrderData] = useState(null);
+  const [showMissingDialog, setShowMissingDialog] = useState(false);
+  const [missingItems, setMissingItems] = useState([]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsPOSScreen(window.innerWidth <= 1024 && window.innerHeight <= 768);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearInterval(timer);
+    };
+  }, []);
 
   const filteredProducts = useMemo(() => {
     let list = [];
-    if (selectedCategory === "All" || !selectedCategory) {
-      Object.values(menu).forEach(arr => (list = list.concat(arr)));
-    } else {
-      list = menu[selectedCategory] || [];
-    }
+    const catKeys = (selectedCategory === "All" || !selectedCategory) 
+      ? Object.keys(menu) 
+      : [selectedCategory];
+    
+    catKeys.forEach(key => {
+      if (menu[key]) list = list.concat(menu[key]);
+    });
+
     if (search) {
-      list = list.filter(p =>
-        p.name.toLowerCase().includes(search.toLowerCase())
-      );
+      const s = search.toLowerCase();
+      return list.filter(p => p.name.toLowerCase().includes(s));
     }
     return list;
   }, [menu, selectedCategory, search]);
 
   const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const taxAmount = Math.max(0, cartSubtotal - discount) * (taxRate / 100);
-  const grandTotal = Math.round(
-    Math.max(0, cartSubtotal - discount) + taxAmount
-  );
+  const grandTotal = Math.round(Math.max(0, cartSubtotal - discount) + taxAmount);
+  const totalItemsInCart = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const getCartQty = id => {
+  const getCartQty = useCallback((id) => {
     const item = cart.find(i => i.id === id);
     return item ? item.quantity : 0;
-  };
+  }, [cart]);
 
-  // ✅ NEW: Check inventory before placing order
-  const handleCheckoutWithInventoryCheck = async () => {
+  // Inventory Check Interceptor
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  
+  const handleCheckout = async () => {
     if (cart.length === 0) return;
     
-    setIsCheckingInventory(true);
-    
     try {
-      // Prepare order data for inventory check
-      const orderData = {
+      setIsCheckingInventory(true);
+      
+      const payload = {
         total_amount: grandTotal,
-        payment_method: "cash", // Temporary, will be updated in final order
-        token: parseInt(selectedToken),
+        payment_method: "cash",
+        token: parseInt(selectedToken) || 1,
+        override_missing_ingredients: false,
         items: cart.map(item => ({
           product_id: item.id,
           quantity: item.quantity,
           subtotal: item.price * item.quantity
-        })),
-        override_missing_ingredients: false
+        }))
       };
-      
-      const response = await apiRequest(`${API_URL}/orders/check-inventory`, {
-        method: "POST",
-        body: JSON.stringify(orderData),
+
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`${API_URL}/orders/check-inventory`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
       });
+
+      const data = await response.json();
       
-      if (response.ok) {
-        const result = await response.json();
-        
-        if (result.can_fulfill) {
-          // All ingredients available - proceed directly
-          proceedToCheckout(false);
-        } else {
-          // Missing ingredients - show modal
-          setMissingItems(result.missing_items);
-          setShowInventoryModal(true);
-          setPendingOrderData(orderData);
-        }
-      } else {
-        const error = await response.json();
-        alert(error.detail || "Failed to check inventory");
-        // Fallback: proceed without check
-        proceedToCheckout(false);
+      if (!response.ok) {
+        console.error("Inventory check failed:", data);
+        onCheckout();
+        setIsCartOpen(false);
+        return;
       }
-    } catch (error) {
-      console.error("Inventory check failed:", error);
-      // Fallback: proceed without check
-      proceedToCheckout(false);
+      
+      if (data.can_fulfill === false && data.missing_items && data.missing_items.length > 0) {
+        setMissingItems(data.missing_items);
+        setShowMissingDialog(true);
+        setIsCheckingInventory(false);
+        return;
+      }
+      
+      onCheckout();
+      setIsCartOpen(false);
+    } catch (err) {
+      console.error("Inventory check failed, proceeding normally:", err);
+      onCheckout();
+      setIsCartOpen(false);
     } finally {
       setIsCheckingInventory(false);
     }
   };
 
-  // ✅ NEW: Proceed to checkout with or without override
-  const proceedToCheckout = (overrideMissing) => {
-    if (pendingOrderData) {
-      // Use the stored order data with override flag
-      const finalOrderData = {
-        ...pendingOrderData,
-        override_missing_ingredients: overrideMissing
-      };
-      onCheckout(finalOrderData);
-      setPendingOrderData(null);
-    } else {
-      // Normal checkout without pre-check
-      onCheckout(false);
-    }
-    setShowInventoryModal(false);
-    setMissingItems([]);
+  const handleRemoveAffected = () => {
+    const affectedProductNames = [...new Set(missingItems.map(item => item.product_name))];
+    const affectedIds = cart.filter(item => 
+      affectedProductNames.some(name => item.name.toLowerCase().includes(name.toLowerCase()))
+    ).map(item => item.id);
+    
+    affectedIds.forEach(id => {
+      const itemInCart = cart.find(c => c.id === id);
+      if (itemInCart) {
+        for (let i = 0; i < itemInCart.quantity; i++) {
+          onRemoveFromCart(itemInCart);
+        }
+      }
+    });
+    setShowMissingDialog(false);
   };
 
+  const handleContinueAnyway = () => {
+    setShowMissingDialog(false);
+    onCheckout({ override_missing_ingredients: true });
+    setIsCartOpen(false);
+  };
+
+  const isCashier = userRole === "cashier";
+
+  // Cart Item Component
+  const CartItem = ({ item, onAdd, onRemove }) => (
+    <div className={`flex items-center justify-between p-3 rounded-xl border transition-all duration-200 hover:shadow-md ${theme.border.default} ${theme.bg.card}`}>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold truncate ${theme.text.main}`}>{item.name}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className={`text-[10px] font-mono ${theme.text.muted}`}>₹{item.price}</span>
+          <span className={`text-[10px] font-mono ${theme.text.muted}`}>×</span>
+          <span className={`text-[10px] font-mono ${theme.text.muted}`}>{item.quantity}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onRemove(item)}
+          className="p-1.5 rounded-lg transition-all duration-200 hover:bg-red-500/10 text-red-500 hover:scale-110"
+          aria-label="Decrease quantity"
+        >
+          <Minus size={16} />
+        </button>
+        <span className={`w-6 text-center font-bold text-sm ${theme.text.main}`}>{item.quantity}</span>
+        <button
+          onClick={() => onAdd(item)}
+          className="p-1.5 rounded-lg transition-all duration-200 hover:bg-green-500/10 text-green-500 hover:scale-110"
+          aria-label="Increase quantity"
+        >
+          <Plus size={16} />
+        </button>
+        <button
+          onClick={() => {
+            for (let i = 0; i < item.quantity; i++) {
+              onRemove(item);
+            }
+          }}
+          className="p-1.5 rounded-lg transition-all duration-200 hover:bg-red-500/10 text-red-500 hover:scale-110 ml-1"
+          aria-label="Remove item completely"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div
-      className={`flex h-full transition-colors duration-300 ${theme.bg.main} ${theme.text.main}`}
-      style={{ fontFamily: FONTS.sans }}
-    >
-      {/* LEFT: PRODUCTS */}
-      <div className={`flex-1 flex flex-col border-r ${theme.border.default}`}>
-        {/* SEARCH + CATEGORY */}
-        <div className={`p-3 space-y-2 border-b ${theme.border.default} ${theme.bg.card}`}>
-          <input
-            className={COMMON_STYLES.input(isDarkMode)}
-            placeholder="Search products..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {["All", ...categories].map(cat => (
+    <div className={`relative flex h-full w-full overflow-hidden ${isPOSScreen ? 'md:pb-6' : ''} ${theme.bg.main} ${theme.text.main}`} style={{ fontFamily: FONTS.sans }}>
+      
+      {/* LEFT: PRODUCTS AREA */}
+      <div className={`flex-1 flex flex-col border-r ${theme.border.light} ${theme.bg.main} w-full`}>
+        
+        {/* TOP NAV: SEARCH & FILTERS */}
+        <div className={`p-3 sm:p-4 md:p-4 space-y-3 sm:space-y-4 border-b ${theme.border.light} ${theme.bg.main}`}>
+          <div className="relative">
+            <Search className={`absolute left-3 top-2.5 sm:top-3 ${theme.text.muted}`} size={16} />
+            <input
+              className={`${COMMON_STYLES.input(isDarkMode)} pl-9 sm:pl-10 py-2 sm:py-2.5 min-h-[44px] text-xs sm:text-sm md:text-base`}
+              placeholder="SEARCH TERMINAL..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            {["All", ...categories].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 rounded-md text-xs whitespace-nowrap transition-all ${
-                  selectedCategory === cat
+                className={`px-4 sm:px-5 py-2 min-h-[44px] flex items-center justify-center text-[10px] sm:text-xs font-bold uppercase tracking-[0.05em] transition-none whitespace-nowrap ${
+                  (selectedCategory === cat || (!selectedCategory && cat === "All"))
                     ? theme.button.primary
-                    : theme.button.secondary
+                    : theme.button.ghost
                 }`}
               >
                 {cat}
@@ -178,213 +317,217 @@ export default function POSView({
           </div>
         </div>
 
-        {/* PRODUCT GRID */}
-        <div className="flex-1 overflow-auto p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3 content-start">
-          {filteredProducts.map(p => {
+        {/* RESPONSIVE PRODUCT GRID */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 content-start no-scrollbar">
+          {filteredProducts.map((p) => {
             const qty = getCartQty(p.id);
             return (
-              <div
+              <ProductCard
                 key={p.id}
-                className={`${COMMON_STYLES.card(isDarkMode)} h-[105px] p-3 flex flex-col justify-between hover:border-blue-500 transition-all`}
-              >
-                <div>
-                  <p className="text-[10px] uppercase font-bold opacity-40">{p.category}</p>
-                  <h3 className="text-sm font-semibold leading-tight line-clamp-1">
-                    {p.name}
-                  </h3>
-                  <div className="flex items-center gap-1 text-[11px] opacity-50 mt-1">
-                    <Box size={10} />
-                    <span>{p.stock}</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-sm font-bold">₹{p.price}</span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => onRemoveFromCart(p)}
-                      className={`p-1 rounded-md transition-colors ${theme.bg.subtle} hover:bg-red-500/20 text-red-500`}
-                    >
-                      <Minus size={12} />
-                    </button>
-                    <span className="text-xs font-bold w-4 text-center">{qty}</span>
-                    <button
-                      disabled={p.stock <= 0}
-                      onClick={() => onAddToCart(p)}
-                      className={`p-1 rounded-md transition-colors ${theme.bg.subtle} hover:bg-green-500/20 text-green-500 disabled:opacity-20`}
-                    >
-                      <Plus size={12} />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                product={p}
+                qty={qty}
+                onAddToCart={onAddToCart}
+                onRemoveFromCart={onRemoveFromCart}
+                isDarkMode={isDarkMode}
+                userRole={userRole}
+                theme={theme}
+              />
             );
           })}
         </div>
       </div>
 
-      {/* RIGHT: CART PANEL */}
-      <div className={`w-84 flex flex-col border-l ${theme.border.default} ${theme.bg.card} transition-colors duration-300`}>
-        {/* HEADER */}
-        <div className={`p-4 flex justify-between items-center border-b ${theme.border.default}`}>
+      {/* MOBILE CART TOGGLE FAB */}
+      <button
+        onClick={() => setIsCartOpen(true)}
+        className={`md:hidden fixed bottom-6 right-6 z-30 p-4 min-h-[56px] min-w-[56px] rounded-full shadow-xl flex items-center justify-center ${theme.button.primary}`}
+      >
+        <ShoppingCart size={24} />
+        {totalItemsInCart > 0 && (
+          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white dark:border-[#0b0f14]">
+            {totalItemsInCart}
+          </span>
+        )}
+      </button>
+
+      {/* MOBILE SIDEBAR BACKDROP */}
+      {isCartOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={() => setIsCartOpen(false)}
+        />
+      )}
+
+      {/* RIGHT: CART SIDEBAR */}
+      <aside 
+        className={`
+          fixed inset-y-0 right-0 z-50 w-[85vw] sm:w-[380px] shrink-0
+          transform transition-transform duration-300 ease-in-out
+          md:relative md:z-0 md:w-[380px] lg:w-[420px] md:translate-x-0
+          flex flex-col border-l shadow-2xl md:shadow-none
+          ${isCartOpen ? "translate-x-0" : "translate-x-full"}
+          ${theme.border.light} ${theme.bg.subtle}
+        `}
+      >
+        {/* Cart Header */}
+        <div className={`p-4 border-b ${theme.border.light} flex items-center justify-between gap-2`}>
           <div className="flex items-center gap-2">
-            <ShoppingCart size={18} className="text-blue-500" />
-            <span className="font-bold">Current Cart</span>
+            <div className={`p-2 rounded-lg ${theme.bg.card}`}>
+              <ShoppingCart size={18} className="text-blue-500" />
+            </div>
+            <h2 className={`text-lg font-bold tracking-tight ${theme.text.main}`}>Current Cart</h2>
+            {totalItemsInCart > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${theme.bg.active} ${theme.text.secondary}`}>
+                {totalItemsInCart} items
+              </span>
+            )}
           </div>
-          <select
-            value={selectedToken}
-            onChange={e => onSetToken(e.target.value)}
-            className={`text-sm px-2 py-1 rounded border ${theme.bg.main} ${theme.border.default} outline-none`}
-          >
-            {availableTokens.map(t => (
-              <option key={t}>Token {t}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select 
+              value={selectedToken} 
+              onChange={(e) => onSetToken(e.target.value)}
+              className={`${COMMON_STYLES.input(isDarkMode)} w-auto min-w-[90px] text-sm px-3 py-1.5 font-mono font-bold cursor-pointer rounded-lg`}
+            >
+              {availableTokens.map(t => <option key={t} value={t}>Token #{t}</option>)}
+            </select>
+            <button 
+              className={`md:hidden p-2 rounded-lg ${theme.button.ghost}`}
+              onClick={() => setIsCartOpen(false)}
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        {/* CART ITEMS */}
-        <div className="flex-1 overflow-auto p-4 space-y-3">
+        {/* Cart Items */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center opacity-20">
-              <ShoppingCart size={48} strokeWidth={1} />
-              <p className="text-xs font-bold uppercase mt-2">Empty Cart</p>
+            <div className="h-full flex flex-col items-center justify-center opacity-40">
+              <ShoppingCart size={56} strokeWidth={1} className="mb-3" />
+              <p className="text-xs font-bold uppercase tracking-wide">Cart is Empty</p>
+              <p className="text-[10px] mt-1">Add items from the menu</p>
             </div>
           ) : (
-            cart.map(item => (
-              <div key={item.id} className={`flex items-center justify-between p-3 rounded-lg border ${theme.border.default} ${theme.bg.subtle}`}>
-                <div className="flex flex-col">
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-xs opacity-50">₹{item.price} × {item.quantity}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => onRemoveFromCart(item)} className="p-1.5 rounded-md bg-zinc-500/10 hover:bg-zinc-500/20 transition-colors">
-                    <Minus size={14} />
-                  </button>
-                  <span className="font-bold text-xs">{item.quantity}</span>
-                  <button onClick={() => onAddToCart(item)} className="p-1.5 rounded-md bg-zinc-500/10 hover:bg-zinc-500/20 transition-colors">
-                    <Plus size={14} />
-                  </button>
-                </div>
-              </div>
+            cart.map((item) => (
+              <CartItem
+                key={item.id}
+                item={item}
+                onAdd={onAddToCart}
+                onRemove={onRemoveFromCart}
+              />
             ))
           )}
         </div>
 
-        {/* TOTALS */}
-        <div className={`p-4 border-t ${theme.border.default} space-y-3 bg-zinc-500/5`}>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs opacity-60">
+        {/* Totals & Checkout */}
+        <div className={`p-4 border-t ${theme.border.light} ${theme.bg.subtle}`}>
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-[10px] font-bold uppercase tracking-wide ${theme.text.muted}`}>Discount</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount && setDiscount(Number(e.target.value))}
+                  className={`w-24 px-2 py-1 text-right text-sm rounded-lg border ${COMMON_STYLES.input(isDarkMode)}`}
+                  placeholder="0"
+                  min="0"
+                />
+                <span className={`text-xs ${theme.text.muted}`}>₹</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 mb-4">
+            <div className={`flex justify-between items-center text-xs ${theme.text.secondary}`}>
               <span>Subtotal</span>
-              <span>₹{cartSubtotal}</span>
+              <span className="font-mono">₹{cartSubtotal}</span>
             </div>
-            <div className="flex justify-between text-xs opacity-60">
-              <span>GST (5%)</span>
-              <span>₹{taxAmount.toFixed(2)}</span>
+            {discount > 0 && (
+              <div className={`flex justify-between items-center text-xs text-green-500`}>
+                <span>Discount</span>
+                <span className="font-mono">-₹{discount}</span>
+              </div>
+            )}
+            <div className={`flex justify-between items-center text-xs ${theme.text.secondary}`}>
+              <span>Tax ({taxRate}%)</span>
+              <span className="font-mono">₹{taxAmount.toFixed(0)}</span>
             </div>
           </div>
-          <div className="flex justify-between items-center pt-2">
-            <span className="font-bold">Payable Amount</span>
-            <span className="text-xl font-black text-blue-500">₹{grandTotal}</span>
+
+          <div className={`pt-3 border-t ${theme.border.light} flex justify-between items-baseline mb-4`}>
+            <span className={`text-xs font-bold uppercase tracking-wide ${theme.text.muted}`}>Total</span>
+            <span className={`text-3xl font-mono font-bold tracking-tighter text-blue-500`}>₹{grandTotal}</span>
           </div>
+
           <button
             disabled={cart.length === 0 || isCheckingInventory}
-            onClick={handleCheckoutWithInventoryCheck}
-            className={`${theme.button.primary} w-full py-3 rounded-xl font-bold uppercase tracking-wider shadow-lg shadow-blue-500/20 transition-transform active:scale-95 disabled:opacity-30 disabled:grayscale`}
+            onClick={handleCheckout}
+            className={`w-full py-3.5 font-bold text-xs uppercase tracking-wide flex items-center justify-center gap-2 rounded-xl transition-all duration-200 hover:shadow-lg disabled:opacity-50 ${theme.button.primary}`}
           >
             {isCheckingInventory ? (
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Checking Inventory...
-              </div>
+              <Loader className="animate-spin" size={18} />
             ) : (
-              "Confirm Order"
+              <>
+                <span>Confirm Order</span>
+                <ArrowRight size={14} />
+              </>
             )}
           </button>
         </div>
-      </div>
+      </aside>
 
-      {/* ✅ NEW: INVENTORY OVERRIDE MODAL */}
-      {showInventoryModal && (
-        <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-          <div className={`w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 ${COMMON_STYLES.card(isDarkMode)}`}>
-            {/* Modal Header */}
-            <div className={`p-5 border-b flex items-center gap-3`} style={{
-              backgroundColor: isDarkMode ? "#111111" : "#fef2f2",
-              borderColor: isDarkMode ? "rgba(255,255,240,0.08)" : "rgba(220,38,38,0.2)"
-            }}>
-              <div className="p-2 rounded-full bg-red-500/10">
-                <AlertTriangle size={24} className="text-red-500" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold" style={{ color: isDarkMode ? "#FFFFF0" : "#991b1b" }}>
-                  Insufficient Ingredients
-                </h3>
-                <p className="text-sm mt-0.5" style={{ color: isDarkMode ? "rgba(255,255,240,0.6)" : "rgba(0,0,0,0.6)" }}>
-                  Some items are low on ingredients. Continuing may affect preparation.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowInventoryModal(false)}
-                className="p-1.5 rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+      {/* POS SYSTEM FOOTER */}
+      {isPOSScreen && (
+        <div className={`hidden md:flex fixed bottom-0 left-0 w-full h-6 px-4 items-center justify-between text-[10px] font-mono font-bold uppercase tracking-[0.05em] z-50 border-t ${theme.border.light} ${theme.bg.subtle} ${theme.text.muted}`}>
+          <div className="flex items-center gap-6">
+            <span className="flex items-center gap-1.5"><span className="text-green-500 text-[10px] leading-none">●</span> System Online</span>
+            <span>Terminal: T-01</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <span>Local Time: {currentTime.toLocaleTimeString()}</span>
+          </div>
+        </div>
+      )}
+
+      {/* MISSING INGREDIENTS DIALOG */}
+      {showMissingDialog && (
+        <div className={`fixed inset-0 z-[60] flex items-center justify-center p-4 ${theme.bg.overlay} backdrop-blur-sm`} style={{ fontFamily: FONTS.sans }}>
+          <div className={`w-[95vw] sm:w-full sm:max-w-md flex flex-col p-4 sm:p-6 md:p-6 ${COMMON_STYLES.modal(isDarkMode)}`}>
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-red-500">Inventory Alert</h2>
+              <button 
+                onClick={() => setShowMissingDialog(false)} 
+                className={`p-1.5 rounded-md transition-none ${theme.button.ghost}`}
               >
                 <X size={18} />
               </button>
             </div>
-
-            {/* Missing Items List */}
-            <div className="p-5 max-h-80 overflow-y-auto">
-              <p className="text-sm font-medium mb-3" style={{ color: isDarkMode ? "#FFFFF0" : "#1a1a1a" }}>
-                Missing Items:
-              </p>
-              <div className="space-y-3">
-                {missingItems.map((item, idx) => (
-                  <div key={idx} className={`p-3 rounded-lg border ${isDarkMode ? "border-red-500/20 bg-red-500/5" : "border-red-200 bg-red-50"}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium" style={{ color: isDarkMode ? "#FFFFF0" : "#1a1a1a" }}>
-                          {item.product_name}
-                        </p>
-                        <p className="text-xs mt-1" style={{ color: isDarkMode ? "rgba(255,255,240,0.6)" : "rgba(0,0,0,0.6)" }}>
-                          Ingredient: {item.ingredient_name}
-                        </p>
-                        <div className="flex items-center gap-3 mt-2 text-xs">
-                          <span style={{ color: isDarkMode ? "rgba(255,255,240,0.5)" : "rgba(0,0,0,0.5)" }}>
-                            Required: {item.required_quantity.toFixed(2)} {item.unit}
-                          </span>
-                          <span style={{ color: isDarkMode ? "rgba(255,255,240,0.5)" : "rgba(0,0,0,0.5)" }}>
-                            Available: {item.available_stock} {item.unit}
-                          </span>
-                          <span className="font-bold text-red-500">
-                            Shortfall: {item.shortfall.toFixed(2)} {item.unit}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+            
+            <p className={`text-xs sm:text-sm mb-4 ${theme.text.secondary}`}>
+              Some ingredients are missing for selected items. Do you want to continue?
+            </p>
+            
+            <div className={`mb-6 p-3 rounded bg-red-500/10 border border-red-500/20 max-h-40 overflow-y-auto`}>
+              <ul className={`list-disc pl-4 text-xs sm:text-sm font-bold ${theme.text.main}`}>
+                {[...new Set(missingItems.map(i => i.product_name))].map((name, idx) => (
+                  <li key={idx}>{name}</li>
                 ))}
-              </div>
+              </ul>
             </div>
-
-            {/* Modal Actions */}
-            <div className={`p-5 border-t flex gap-3`} style={{
-              borderColor: isDarkMode ? "rgba(255,255,240,0.08)" : "rgba(0,0,0,0.08)",
-              backgroundColor: isDarkMode ? "#111111" : "#fafafa"
-            }}>
-              <button
-                onClick={() => setShowInventoryModal(false)}
-                className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${theme.button.secondary}`}
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button 
+                onClick={handleRemoveAffected}
+                className={`flex-1 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.05em] rounded-md transition-colors ${theme.button.secondary}`}
               >
-                Cancel Order
+                Remove Affected
               </button>
-              <button
-                onClick={() => proceedToCheckout(true)}
-                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:shadow-lg flex items-center justify-center gap-2"
-                style={{
-                  backgroundColor: "#dc2626",
-                  color: "#ffffff",
-                }}
+              <button 
+                onClick={handleContinueAnyway}
+                className={`flex-1 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.05em] rounded-md transition-colors bg-red-500 hover:bg-red-600 text-white`}
               >
-                <CheckCircle size={16} />
-                Continue Anyway (Override)
+                Continue Anyway
               </button>
             </div>
           </div>

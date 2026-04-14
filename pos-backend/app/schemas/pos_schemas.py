@@ -18,6 +18,13 @@ class UserUpdate(BaseModel):
 class UserCreate(UserBase):
     password: str
 
+class StaffResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    role: str
+    restaurant_id: int
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
@@ -53,6 +60,14 @@ class ProductResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# ✅ UPDATED: ProductWithRecipeResponse with ingredients_below_threshold
+class ProductWithRecipeResponse(ProductResponse):
+    has_recipe: bool = False
+    ingredients_below_threshold: bool = False  # ✅ ADD THIS FIELD
+    
+    class Config:
+        from_attributes = True
+
 # --- ORDER SCHEMAS ---
 class OrderItemCreate(BaseModel):
     product_id: int
@@ -61,10 +76,10 @@ class OrderItemCreate(BaseModel):
 
 class OrderCreate(BaseModel):
     total_amount: Decimal
-    payment_method: str  # upi, cash, card
+    payment_method: str
     token: int
     items: List[OrderItemCreate]
-    override_missing_ingredients: bool = False  # ✅ ADD THIS FIELD
+    override_missing_ingredients: bool = False
 
 class OrderResponse(BaseModel):
     id: int
@@ -74,7 +89,7 @@ class OrderResponse(BaseModel):
     status: str
     created_at: datetime
     token: Optional[str]
-    missing_ingredients: Optional[List[int]] = None  # ✅ ADD THIS FIELD
+    missing_ingredients: Optional[List[int]] = None
 
     class Config:
         from_attributes = True
@@ -96,8 +111,13 @@ class InventoryCheckResponse(BaseModel):
 
 # --- SETTINGS & INVENTORY SCHEMAS ---
 class SettingUpdate(BaseModel):
-    key_name: str
     value: str
+
+class SettingsUpdateRequest(BaseModel):
+    upiId: Optional[str] = None
+    payeeName: Optional[str] = None
+    kitchenCapacity: Optional[int] = None
+    restaurantId: Optional[int] = None
 
 class IngredientCreate(BaseModel):
     name: str

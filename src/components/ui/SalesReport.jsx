@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+// Updated SalesReport.jsx - With Missing Ingredients Sold Section
+import React, { useMemo, useState } from 'react';
 import {
   BarChart3,
   Calendar,
@@ -9,6 +10,11 @@ import {
   ReceiptText,
   ShoppingBag,
   TrendingUp,
+  AlertTriangle,
+  Package,
+  ChevronDown,
+  ChevronUp,
+  Flame
 } from 'lucide-react';
 import { getTheme, COMMON_STYLES, FONTS } from './theme';
 
@@ -17,11 +23,12 @@ export default function SalesReport({
   reportDate,
   setReportDate,
   isDarkMode,
-  isHistoryLoading, // Passed from parent
+  isHistoryLoading,
   activeOrders = [],
   kitchenCapacity = 20,
 }) {
   const theme = getTheme(isDarkMode);
+  const [showMissingProducts, setShowMissingProducts] = useState(true);
 
   const formatCurrency = (value) =>
     new Intl.NumberFormat('en-IN', {
@@ -47,6 +54,43 @@ export default function SalesReport({
       ? history.filter((order) => safeDatePart(order.created_at) === reportDate)
       : [];
   }, [history, reportDate]);
+
+  // Calculate missing ingredients products sold
+  const missingProductsSold = useMemo(() => {
+    const productMap = new Map(); // product_name -> { count, total_revenue, product_id, category }
+    
+    ordersForDate.forEach((order) => {
+      // Check if order has missing ingredients
+      const missingIngredients = order.missing_ingredients;
+      if (missingIngredients && missingIngredients.length > 0 && order.items) {
+        // For each item in the order
+        order.items.forEach((item) => {
+          const productName = item.name;
+          const quantity = item.quantity || 1;
+          const subtotal = item.subtotal || (item.price * quantity);
+          
+          if (productMap.has(productName)) {
+            const existing = productMap.get(productName);
+            existing.count += quantity;
+            existing.total_revenue += subtotal;
+          } else {
+            productMap.set(productName, {
+              name: productName,
+              count: quantity,
+              total_revenue: subtotal,
+              product_id: item.product_id,
+              category: item.category || 'General'
+            });
+          }
+        });
+      }
+    });
+    
+    // Convert to array and sort by count (descending)
+    return Array.from(productMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Show top 10
+  }, [ordersForDate]);
 
   const summary = useMemo(() => {
     const revenue = ordersForDate.reduce(
@@ -128,6 +172,8 @@ export default function SalesReport({
     return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
   };
 
+  const totalMissingSold = missingProductsSold.reduce((sum, p) => sum + p.count, 0);
+
   return (
     <div className="flex flex-col h-full antialiased" style={{ fontFamily: FONTS.sans }}>
       
@@ -196,13 +242,125 @@ export default function SalesReport({
         </div>
       </div>
 
+      {/* PREMIUM MISSING INGREDIENTS SECTION */}
+      {missingProductsSold.length > 0 && (
+        <div className={`mb-6 rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl ${COMMON_STYLES.card(isDarkMode)}`}>
+          {/* Section Header */}
+          <div 
+            className="px-6 py-4 border-b flex items-center justify-between cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            onClick={() => setShowMissingProducts(!showMissingProducts)}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10">
+                <Flame size={20} className="text-amber-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold">Products Sold with Missing Ingredients</h3>
+                <p className="text-xs opacity-60 mt-0.5">
+                  {totalMissingSold} units sold across {missingProductsSold.length} products while ingredients were low
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono px-2 py-1 rounded-full bg-amber-500/10 text-amber-500">
+                ⚠️ Needs Attention
+              </span>
+              {showMissingProducts ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+          </div>
+
+          {/* Section Content */}
+          {showMissingProducts && (
+            <div className="p-5">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-2xl font-bold text-amber-500">{missingProductsSold.length}</p>
+                  <p className="text-xs opacity-60 mt-1">Products Affected</p>
+                </div>
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-2xl font-bold text-amber-500">{totalMissingSold}</p>
+                  <p className="text-xs opacity-60 mt-1">Total Units Sold</p>
+                </div>
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-2xl font-bold text-amber-500">
+                    ₹{formatCurrency(missingProductsSold.reduce((sum, p) => sum + p.total_revenue, 0))}
+                  </p>
+                  <p className="text-xs opacity-60 mt-1">Revenue Generated</p>
+                </div>
+              </div>
+
+              {/* Products Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className={`border-b ${theme.border.light}`}>
+                      <th className="text-left py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">#</th>
+                      <th className="text-left py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">Product</th>
+                      <th className="text-left py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">Category</th>
+                      <th className="text-right py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">Units Sold</th>
+                      <th className="text-right py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">Revenue</th>
+                      <th className="text-center py-3 px-3 text-xs font-bold uppercase tracking-wider opacity-60">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {missingProductsSold.map((product, idx) => (
+                      <tr key={idx} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="w-6 h-6 rounded-full bg-amber-500/10 flex items-center justify-center">
+                            <span className="text-xs font-bold text-amber-500">#{idx + 1}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div>
+                            <p className="font-medium">{product.name}</p>
+                            <p className="text-xs opacity-50">ID: {product.product_id || 'N/A'}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
+                            {product.category || 'General'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <span className="font-mono font-bold text-amber-500">{product.count}</span>
+                          <span className="text-xs opacity-50 ml-1">units</span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono">₹{formatCurrency(product.total_revenue)}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500">
+                            <AlertTriangle size={10} />
+                            Low Stock Sold
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer Note */}
+              <div className="mt-4 pt-3 border-t border-amber-500/20 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs opacity-60">
+                  <AlertTriangle size={12} />
+                  <span>Products that were sold while some ingredients were below threshold</span>
+                </div>
+                <div className="text-xs opacity-40">
+                  Sorted by units sold (descending)
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* GRAPH CONTAINER */}
       <div
         className={`rounded-2xl border p-8 ${COMMON_STYLES.card(isDarkMode)} border-zinc-800 shadow-2xl flex flex-col relative overflow-hidden`}
         style={{ minHeight: 400 }}
       >
         
-        {/* ✅ LOADING OVERLAY (Fixed: No more infinite spinner) */}
+        {/* LOADING OVERLAY */}
         {isHistoryLoading && (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center animate-in fade-in duration-300">
             <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
@@ -290,20 +448,29 @@ export default function SalesReport({
               <tbody className="divide-y divide-zinc-800/50">
                 {recentOrders.map((order) => {
                   const parsedDate = parseDate(order.created_at);
+                  const hasMissing = order.missing_ingredients && order.missing_ingredients.length > 0;
                   return (
                     <tr key={order.id || `${order.token}-${order.created_at}`} className="hover:bg-white/5 transition-colors">
                       <td className="p-3 font-mono font-bold text-blue-400">{order.token || '—'}</td>
                       <td className="p-3 font-mono">₹{formatCurrency(order.total_amount)}</td>
                       <td className="p-3">
-                        <span className={`px-2 py-1 rounded border text-[10px] font-bold uppercase ${statusPill(order.status)}`}>
-                          {order.status || 'unknown'}
-                        </span>
-                      </td>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded border text-[10px] font-bold uppercase ${statusPill(order.status)}`}>
+                            {order.status || 'unknown'}
+                          </span>
+                          {hasMissing && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-amber-500/10 text-amber-500">
+                              <AlertTriangle size={8} />
+                              Missing
+                            </span>
+                          )}
+                        </div>
+                       </td>
                       <td className="p-3 text-right opacity-60 text-xs">
                         {parsedDate
                           ? parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                           : '—'}
-                      </td>
+                       </td>
                     </tr>
                   );
                 })}

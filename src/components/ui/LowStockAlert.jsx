@@ -1,6 +1,4 @@
-// components/ui/LowStockAlert.jsx
-// Professional notification center with #002366 theme
-
+// Updated LowStockAlert.jsx - Fully clickable button with proper cursor everywhere
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Bell, 
@@ -18,7 +16,6 @@ import autoTable from "jspdf-autotable";
 const downloadLowStockPDF = (lowStockItems) => {
   const doc = new jsPDF();
   
-  // Header with #002366
   doc.setFillColor(0, 35, 102);
   doc.rect(0, 0, 210, 50, "F");
   doc.setTextColor(255, 255, 240);
@@ -69,7 +66,6 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
   );
   const totalAlerts = alertItems.length;
   
-  // Animate new alerts
   useEffect(() => {
     if (totalAlerts > previousCountRef.current) {
       setHasNewAlerts(true);
@@ -97,18 +93,20 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen]);
   
+  // Don't render if no alerts
   if (totalAlerts === 0) return null;
   
   return (
     <div className="relative">
-      {/* Notification Bell Button */}
+      {/* Notification Bell Button - FULLY CLICKABLE with cursor-pointer on entire area */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 ${
+        className={`relative flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 cursor-pointer ${
           isOpen 
             ? "bg-[#002366] text-[#FFFFF0] shadow-lg" 
             : "hover:bg-[#002366]/10 text-[#002366] dark:text-[#FFFFF0]"
         }`}
+        style={{ cursor: "pointer" }}
       >
         <Bell size={20} />
         
@@ -127,7 +125,7 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
         )}
       </button>
       
-      {/* Professional Dropdown Modal */}
+      {/* Dropdown Modal */}
       {isOpen && (
         <div 
           ref={modalRef}
@@ -163,8 +161,8 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-                style={{ color: isDarkMode ? "rgba(255,255,240,0.4)" : "rgba(0,0,0,0.4)" }}
+                className="p-1.5 rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                style={{ color: isDarkMode ? "rgba(255,255,240,0.4)" : "rgba(0,0,0,0.4)", cursor: "pointer" }}
               >
                 <X size={16} />
               </button>
@@ -203,7 +201,7 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
               return (
                 <div 
                   key={item.id}
-                  className="px-5 py-3 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                  className="px-5 py-3 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex-1">
@@ -256,10 +254,11 @@ export default function LowStockAlert({ lowStock = [], isDarkMode = true }) {
           }}>
             <button
               onClick={() => downloadLowStockPDF(alertItems)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 hover:shadow-lg"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 hover:shadow-lg cursor-pointer"
               style={{
                 backgroundColor: "#002366",
                 color: "#FFFFF0",
+                cursor: "pointer"
               }}
               onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-1px)"}
               onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
