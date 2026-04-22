@@ -12,27 +12,26 @@ from app.routers import staff
 from app.routers import ingredients
 from app.routers import recipes
 from app.routers import dashboard
+from app.routers import feedbacks  # ✅ ADD THIS
+from app.routers import restaurants  # ✅ ADD THIS
 from app.db.base import Base
 from app.db.session import engine
 
 app = FastAPI(title="POS Backend - FastAPI")
-ALLOWED_ORIGINS = allowed_origins_env.split(",")
-# Updated CORS origins
-# ALLOWED_ORIGINS = [
-#     "http://localhost:5173",
-#     "http://127.0.0.1:5173",
-#     "http://localhost:3000",
-#     "http://127.0.0.1:3000",
-#     "http://localhost:80",
-#     "http://127.0.0.1:80",
-#     "http://192.168.1.114:5173",
-#     "https://posspager.vercel.app",
-# ]
 
-# FIXED: Changed ALLOWED_ORIGINS to allow_origins (lowercase)
+# ✅ Fix: Define ALLOWED_ORIGINS properly
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # ← This is the fix
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +47,8 @@ app.include_router(staff.router)
 app.include_router(ingredients.router)
 app.include_router(recipes.router)
 app.include_router(dashboard.router)
+app.include_router(feedbacks.router)   # ✅ ADD THIS
+app.include_router(restaurants.router)  # ✅ ADD THIS
 
 @app.on_event("startup")
 async def create_tables():

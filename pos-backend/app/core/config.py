@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str 
     DB_HOST: str
-    DB_PORT: int
+    DB_PORT: int = 5432  # ✅ PostgreSQL default port
     DB_NAME: str
     
     # Auth & URL
@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     PORT: int = 8000
     BAUD_RATE: int = 115200
 
-    # Pydantic V2 Configuration Style
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding='utf-8',
@@ -30,6 +29,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Construct DATABASE_URL after settings are loaded
 if not settings.DATABASE_URL:
-    settings.DATABASE_URL = f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    settings.DATABASE_URL = f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"

@@ -1,8 +1,8 @@
 fastapi==0.133.1
 uvicorn==0.41.0
 sqlalchemy==2.0.47
-aiomysql==0.3.2
-pymysql==1.1.2
+asyncpg==0.30.0  # ✅ PostgreSQL async driver (replace aiomysql)
+psycopg2-binary==2.9.10  # ✅ PostgreSQL sync driver
 python-dotenv==1.2.1
 python-jose==3.5.0
 passlib==1.7.4
@@ -12,4 +12,4 @@ pydantic-settings==2.13.1
 python-multipart==0.0.20
 email-validator==2.3.0
 pyserial==3.5
-cryptography==46.0.5  # Add this
+cryptography==46.0.5
