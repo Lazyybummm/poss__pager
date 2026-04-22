@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, TIMESTAMP, 
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
-# Unit constants
+# ✅ Unit constants
 DECIMAL_UNITS = ['kg', 'g', 'gm', 'ml', 'l', 'litre', 'liter', 'mg', 'lb', 'oz', 'cup', 'tbsp', 'tsp']
 INTEGER_UNITS = ['pcs', 'piece', 'pieces', 'packet', 'packets', 'bottle', 'bottles', 'box', 'boxes', 'unit', 'units', 'dozen']
 
@@ -22,7 +22,6 @@ class User(Base):
     username = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, nullable=False)
     password = Column(String(255), nullable=False)
-    # ✅ Use String instead of Enum for PostgreSQL
     role = Column(String(20), nullable=False, default='cashier')
     created_at = Column(TIMESTAMP, server_default=func.now())
     restaurant_id = Column(Integer, ForeignKey("restaurants.id"), nullable=True)
@@ -48,7 +47,6 @@ class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
     total_amount = Column(Numeric(10, 2), nullable=False)
-    # ✅ Use String instead of Enum
     payment_method = Column(String(10), nullable=False)
     payment_status = Column(String(10), nullable=False, default='pending')
     status = Column(String(10), nullable=False, default='created')

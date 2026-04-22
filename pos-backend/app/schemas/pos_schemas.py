@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, validator
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime
+import json
 
 # ✅ Unit constants
 DECIMAL_UNITS = ['kg', 'g', 'gm', 'ml', 'l', 'litre', 'liter', 'mg', 'lb', 'oz', 'cup', 'tbsp', 'tsp']
@@ -100,6 +101,20 @@ class OrderResponse(BaseModel):
 
     class Config:
         from_attributes = True
+    
+    # ✅ Validator to handle JSON string to list conversion
+    @validator('missing_ingredients', pre=True)
+    def parse_missing_ingredients(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        if isinstance(v, list):
+            return v
+        return []
 
 
 class MissingIngredientCheck(BaseModel):
@@ -130,7 +145,6 @@ class SettingsUpdateRequest(BaseModel):
     restaurantId: Optional[int] = None
 
 
-# ✅ UPDATED Ingredient schemas
 class IngredientCreate(BaseModel):
     name: str
     unit: str

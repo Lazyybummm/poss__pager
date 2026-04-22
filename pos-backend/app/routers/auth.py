@@ -2,16 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.future import select
-from sqlalchemy import text  # Required for raw SQL restaurant insertion
 from typing import List
 
 from app.db.session import get_db
-from app.models.pos_models import User
+from app.models.pos_models import User, Restaurant
 from app.schemas.pos_schemas import UserCreate, UserLogin, Token, UserBase
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.core.dependencies import get_current_user
 
 router = APIRouter(tags=["Authentication"])
+
 
 # --- 1. PUBLIC: RESTAURANT ONBOARDING ---
 @router.post("/restaurant-signup", response_model=Token)
@@ -30,14 +30,14 @@ async def restaurant_signup(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     try:
-        # Create Restaurant Entry
-        res_query = text("INSERT INTO restaurants (name, email) VALUES (:name, :email)")
-        await db.execute(res_query, {"name": restaurant_name, "email": user_in.email})
-        
-        # Get the new ID
-        id_query = text("SELECT LAST_INSERT_ID()")
-        res_id_result = await db.execute(id_query)
-        new_restaurant_id = res_id_result.scalar()
+        # ✅ Create Restaurant using SQLAlchemy ORM (not raw SQL with LAST_INSERT_ID)
+        new_restaurant = Restaurant(
+            name=restaurant_name,
+            email=user_in.email
+        )
+        db.add(new_restaurant)
+        await db.flush()  # This assigns an ID to new_restaurant without committing
+        new_restaurant_id = new_restaurant.id
 
         # Create Admin User
         hashed_pw = get_password_hash(user_in.password)
@@ -45,7 +45,7 @@ async def restaurant_signup(
             username=user_in.username,
             email=user_in.email,
             password=hashed_pw,
-            role="admin",  # Force first user as admin
+            role="admin",
             restaurant_id=new_restaurant_id
         )
         
@@ -55,10 +55,17 @@ async def restaurant_signup(
 
         # Generate Access Token
         access_token = create_access_token(subject=new_admin.email)
+        
+        user_response = UserBase(
+            username=new_admin.username,
+            email=new_admin.email,
+            role=new_admin.role
+        )
+        
         return {
             "access_token": access_token,
             "token_type": "bearer",
-            "user": new_admin
+            "user": user_response
         }
 
     except Exception as e:
@@ -69,12 +76,9 @@ async def restaurant_signup(
 # --- 2. PUBLIC: LOGIN ---
 @router.post("/login", response_model=Token)
 async def login(
-    # Change UserLogin to OAuth2PasswordRequestForm
-    # This allows the 'Authorize' button to work
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: AsyncSession = Depends(get_db)
 ):
-    # Note: form_data uses .username even if you are sending an email
     print("LOGIN ATTEMPT:", form_data.username)
     
     result = await db.execute(select(User).where(User.email == form_data.username))
@@ -85,11 +89,18 @@ async def login(
     
     access_token = create_access_token(subject=user.email)
     
+    user_response = UserBase(
+        username=user.username,
+        email=user.email,
+        role=user.role
+    )
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user
+        "user": user_response
     }
+
 
 # --- 3. PROTECTED: ADMIN ONLY STAFF CREATION ---
 @router.post("/create-user", response_model=UserBase)
@@ -101,21 +112,24 @@ async def admin_create_user(
     """
     Allows an Admin to create Managers or Cashiers for their own restaurant.
     """
-    # RBAC Security Check
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Forbidden: Only admins can create staff accounts"
         )
 
-    # Check if email is taken
     result = await db.execute(select(User).where(User.email == user_in.email))
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    if user_in.role not in ["manager", "cashier"]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid role. Can only create 'manager' or 'cashier' accounts"
+        )
+    
     hashed_pw = get_password_hash(user_in.password)
     
-    # Enforce multi-tenancy: New user must share the Admin's restaurant_id
     new_user = User(
         username=user_in.username,
         email=user_in.email,
@@ -127,4 +141,9 @@ async def admin_create_user(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    return new_user
+    
+    return UserBase(
+        username=new_user.username,
+        email=new_user.email,
+        role=new_user.role
+    )

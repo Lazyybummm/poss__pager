@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
 from datetime import datetime, time
+import json
 from app.db.session import get_db
 from app.models.pos_models import (
     Order,
@@ -24,6 +25,21 @@ from app.services.serial_service import serial_bus
 router = APIRouter(tags=["Orders"])
 
 
+# ✅ Helper to ensure missing_ingredients is a list
+def parse_missing_ingredients(value):
+    """Convert JSON string to list"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
+
+
 # ---------------------------------------------------------
 # GET ORDERS
 # ---------------------------------------------------------
@@ -37,7 +53,13 @@ async def get_orders(
         .where(Order.restaurant_id == current_user.restaurant_id)
         .order_by(Order.created_at.desc())
     )
-    return result.scalars().all()
+    orders = result.scalars().all()
+    
+    # ✅ Ensure missing_ingredients is a list for each order
+    for order in orders:
+        order.missing_ingredients = parse_missing_ingredients(order.missing_ingredients)
+    
+    return orders
 
 
 # ---------------------------------------------------------
@@ -153,7 +175,7 @@ async def check_inventory(
 
 
 # ---------------------------------------------------------
-# CREATE ORDER WITH INVENTORY OVERRIDE - FIXED
+# CREATE ORDER WITH INVENTORY OVERRIDE
 # ---------------------------------------------------------
 @router.post("/", response_model=OrderResponse)
 async def create_order(
@@ -180,14 +202,13 @@ async def create_order(
         for item in order_in.items:
             product = products[item.product_id]
             
-            # ✅ FIX: Store product.id as integer, NOT string
             if product.stock < item.quantity:
                 if not order_in.override_missing_ingredients:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Not enough stock for {product.name}. Available: {product.stock}, Required: {item.quantity}"
                     )
-                missing_ingredient_ids.append(product.id)  # ✅ Integer, not string
+                missing_ingredient_ids.append(product.id)
             
             recipe_result = await db.execute(
                 select(Recipe).where(Recipe.product_id == item.product_id)
@@ -236,7 +257,7 @@ async def create_order(
             token=str(order_in.token),
             status="active",
             restaurant_id=current_user.restaurant_id,
-            missing_ingredients=unique_missing_ids  # ✅ Now only integers
+            missing_ingredients=unique_missing_ids
         )
         
         db.add(new_order)
@@ -281,6 +302,9 @@ async def create_order(
         
         await db.commit()
         await db.refresh(new_order)
+        
+        # ✅ Ensure missing_ingredients is a list before returning
+        new_order.missing_ingredients = parse_missing_ingredients(new_order.missing_ingredients)
         
         print(f"✅ Order {new_order.id} created. Override: {order_in.override_missing_ingredients}, Missing: {new_order.missing_ingredients}")
         
@@ -352,6 +376,11 @@ async def get_order_history(
         )
         
         orders = result.scalars().all()
+        
+        # ✅ Ensure missing_ingredients is a list for each order
+        for order in orders:
+            order.missing_ingredients = parse_missing_ingredients(order.missing_ingredients)
+        
         return {"orders": orders}
     except Exception as e:
         print(f"Error fetching history: {e}")
