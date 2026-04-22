@@ -1,7 +1,7 @@
 // StaffManagement.jsx - Complete Production Ready
 import React, { useState, useMemo, useEffect } from "react";
 import { Plus, User, Settings, Trash2, X, Mail, UserCheck, Loader, Search, Filter, AlertCircle } from "lucide-react";
-import { getTheme, COMMON_STYLES } from "./theme";
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import RestaurantVendorUI from './components/ui/RestaurantVendorUI';
-import LoginView from './components/ui/LoginView';
+import RestaurantVendorUI from './components/layout/RestaurantVendorUI';
+import LoginView from './components/auth/LoginView';
 
 // ✅ DYNAMIC BACKEND CONNECTION - Use environment variable with fallback
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";

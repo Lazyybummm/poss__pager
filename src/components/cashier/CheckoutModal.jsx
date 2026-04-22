@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, Loader, ArrowRight } from 'lucide-react';
-import { getTheme, COMMON_STYLES, FONTS } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 export default function CheckoutModal({ 
   isOpen, 

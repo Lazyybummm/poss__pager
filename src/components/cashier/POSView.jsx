@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Search, Plus, Minus, ShoppingCart, ArrowRight, X, Loader, AlertCircle, Info, Trash2 } from "lucide-react";
-import { getTheme, COMMON_STYLES, FONTS } from "./theme";
-
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 // Internal lightweight placeholder aligned with Level 2 Surface
 const PlaceholderImg = () => (
   <div className="w-full h-full bg-[#121a23] flex items-center justify-center">
@@ -116,6 +115,9 @@ export default function POSView({
   const [showMissingDialog, setShowMissingDialog] = useState(false);
   const [missingItems, setMissingItems] = useState([]);
 
+  // ✅ Store override flag so we can pass it to onCheckout after dialog resolves
+  const [pendingOverride, setPendingOverride] = useState(false);
+
   useEffect(() => {
     const handleResize = () => {
       setIsPOSScreen(window.innerWidth <= 1024 && window.innerHeight <= 768);
@@ -157,7 +159,6 @@ export default function POSView({
     return item ? item.quantity : 0;
   }, [cart]);
 
-  // Inventory Check Interceptor
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
   
   const handleCheckout = async () => {
@@ -191,6 +192,7 @@ export default function POSView({
       const data = await response.json();
       
       if (!response.ok) {
+        // ✅ Inventory check API itself failed — still show payment portal normally
         console.error("Inventory check failed:", data);
         onCheckout();
         setIsCartOpen(false);
@@ -198,15 +200,19 @@ export default function POSView({
       }
       
       if (data.can_fulfill === false && data.missing_items && data.missing_items.length > 0) {
+        // ✅ Missing ingredients found — show dialog, do NOT proceed yet
         setMissingItems(data.missing_items);
+        setPendingOverride(false);
         setShowMissingDialog(true);
         setIsCheckingInventory(false);
         return;
       }
       
+      // ✅ Inventory is fine — proceed to payment portal normally
       onCheckout();
       setIsCartOpen(false);
     } catch (err) {
+      // ✅ Network error — still show payment portal
       console.error("Inventory check failed, proceeding normally:", err);
       onCheckout();
       setIsCartOpen(false);
@@ -216,6 +222,7 @@ export default function POSView({
   };
 
   const handleRemoveAffected = () => {
+    // Remove all affected products from cart
     const affectedProductNames = [...new Set(missingItems.map(item => item.product_name))];
     const affectedIds = cart.filter(item => 
       affectedProductNames.some(name => item.name.toLowerCase().includes(name.toLowerCase()))
@@ -229,11 +236,21 @@ export default function POSView({
         }
       }
     });
+
     setShowMissingDialog(false);
+
+    // ✅ After removing affected items, proceed to payment portal for remaining items
+    // Small timeout to let cart state update before proceeding
+    setTimeout(() => {
+      onCheckout();
+      setIsCartOpen(false);
+    }, 100);
   };
 
   const handleContinueAnyway = () => {
     setShowMissingDialog(false);
+
+    // ✅ Proceed to payment portal with override flag — NOT directly to kitchen
     onCheckout({ override_missing_ingredients: true });
     setIsCartOpen(false);
   };
@@ -505,7 +522,7 @@ export default function POSView({
             </div>
             
             <p className={`text-xs sm:text-sm mb-4 ${theme.text.secondary}`}>
-              Some ingredients are missing for selected items. Do you want to continue?
+              Some ingredients are missing for selected items. How would you like to proceed?
             </p>
             
             <div className={`mb-6 p-3 rounded bg-red-500/10 border border-red-500/20 max-h-40 overflow-y-auto`}>
@@ -517,12 +534,14 @@ export default function POSView({
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3">
+              {/* ✅ Remove affected items then go to payment portal for remaining */}
               <button 
                 onClick={handleRemoveAffected}
                 className={`flex-1 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.05em] rounded-md transition-colors ${theme.button.secondary}`}
               >
                 Remove Affected
               </button>
+              {/* ✅ Go to payment portal with override flag */}
               <button 
                 onClick={handleContinueAnyway}
                 className={`flex-1 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.05em] rounded-md transition-colors bg-red-500 hover:bg-red-600 text-white`}

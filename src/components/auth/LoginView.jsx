@@ -1,7 +1,7 @@
 // Updated LoginView.jsx - Fixed for Docker
 import React, { useState } from 'react';
 import { User, Lock, Loader, Moon, Sun, AtSign, Building2, ChefHat, ArrowRight } from 'lucide-react';
-import { getTheme, COMMON_STYLES, FONTS } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 /* --- MAIN COMPONENT --- */
 export default function LoginView({ onLogin, isDarkMode, onToggleTheme }) {

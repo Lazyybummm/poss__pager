@@ -16,7 +16,7 @@ import {
   ChevronUp,
   Flame
 } from 'lucide-react';
-import { getTheme, COMMON_STYLES, FONTS } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 export default function SalesReport({
   history = [],

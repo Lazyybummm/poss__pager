@@ -1,7 +1,6 @@
 // OrderTimer.jsx
 import React, { useState, useEffect } from 'react';
-import { getTheme } from "./theme";
-
+import { getTheme } from "./theme";  // ✅ Already correct
 const OrderTimer = ({ startedAt, large = false, isDarkMode = true }) => {
   const [elapsed, setElapsed] = useState(0);
   const theme = getTheme(isDarkMode);

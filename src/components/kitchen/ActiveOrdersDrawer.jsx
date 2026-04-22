@@ -1,7 +1,7 @@
 // ActiveOrdersDrawer.jsx
 import React from 'react';
 import { X, ChefHat, Check, BellRing, ReceiptText } from 'lucide-react';
-import { getTheme, COMMON_STYLES, FONTS } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 export default function ActiveOrdersDrawer({ 
   isOpen, onClose, orders = [], onCompleteOrder, onCallCustomer, isDarkMode 

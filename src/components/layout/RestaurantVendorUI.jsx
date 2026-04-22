@@ -15,21 +15,20 @@ import {
   CheckCircle,
   X,
   AlertTriangle
-} from "lucide-react";
-import { getTheme, COMMON_STYLES, FONTS } from "./theme";
-import POSView from "./POSView";
-import CheckoutModal from "./CheckoutModal";
-import StaffManagement from "./StaffManagement";
-import SalesReport from "./SalesReport";
-import AdminSettingsModal from "./AdminSettingsModal";
-import ActiveOrdersDrawer from "./ActiveOrdersDrawer";
-import { getUPIQR } from "./utils";
-import InventoryManager from "./InventoryManager";
-import ManagerDashboard from "./ManagerDashboard";
-import ProductManagement from "./ProductManagement";
-import RecipeManager from "./RecipeManager";
-import LowStockAlert from "./LowStockAlert";
-import { printReceipt } from "./printerService";
+} from "lucide-react";import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
+import POSView from "../cashier/POSView";
+import CheckoutModal from "../cashier/CheckoutModal";
+import StaffManagement from "../admin/StaffManagement";
+import SalesReport from "../admin/SalesReport";
+import AdminSettingsModal from "../admin/AdminSettingsModal";
+import ActiveOrdersDrawer from "../kitchen/ActiveOrdersDrawer";
+import { getUPIQR } from "../../utils/utils";
+import InventoryManager from "../admin/InventoryManager";
+import ManagerDashboard from "../manager/ManagerDashboard";
+import ProductManagement from "../admin/ProductManagement";
+import RecipeManager from "../admin/RecipeManager";
+import LowStockAlert from "../shared/LowStockAlert";
+import { printReceipt } from "../../services/printerService";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 

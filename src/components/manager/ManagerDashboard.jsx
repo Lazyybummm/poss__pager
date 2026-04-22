@@ -2,7 +2,7 @@
 // Professional dashboard with clean design
 
 import React, { useEffect, useState } from "react";
-import { getTheme, COMMON_STYLES } from "./theme";
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 import { TrendingUp, ShoppingCart, Package, Users, Coffee, Clock, AlertCircle } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";

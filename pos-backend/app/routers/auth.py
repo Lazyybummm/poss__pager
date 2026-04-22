@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.future import select
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 
 from app.db.session import get_db
 from app.models.pos_models import User, Restaurant
@@ -102,7 +103,40 @@ async def login(
     }
 
 
-# --- 3. PROTECTED: ADMIN ONLY STAFF CREATION ---
+# --- 3. PROTECTED: GET CURRENT USER INFO WITH RESTAURANT ---
+@router.get("/me")
+async def get_current_user_info(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get the currently authenticated user's information including their restaurant details.
+    This endpoint is useful for dashboards to display restaurant name.
+    """
+    # Fetch restaurant details
+    restaurant_result = await db.execute(
+        select(Restaurant).where(Restaurant.id == current_user.restaurant_id)
+    )
+    restaurant = restaurant_result.scalars().first()
+    
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "role": current_user.role,
+        "restaurant_id": current_user.restaurant_id,
+        "restaurant": {
+            "id": restaurant.id if restaurant else None,
+            "name": restaurant.name if restaurant else None,
+            "email": restaurant.email if restaurant else None,
+            "phone": restaurant.phone if restaurant else None,
+            "created_at": restaurant.created_at if restaurant else None
+        } if restaurant else None,
+        "created_at": current_user.created_at
+    }
+
+
+# --- 4. PROTECTED: ADMIN ONLY STAFF CREATION ---
 @router.post("/create-user", response_model=UserBase)
 async def admin_create_user(
     user_in: UserCreate, 
@@ -147,3 +181,33 @@ async def admin_create_user(
         email=new_user.email,
         role=new_user.role
     )
+
+
+# --- 5. PROTECTED: GET ALL USERS FOR CURRENT RESTAURANT (Admin/Manager only) ---
+@router.get("/users", response_model=List[UserBase])
+async def get_restaurant_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all users belonging to the current user's restaurant (Admin/Manager only)
+    """
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and managers can view all users"
+        )
+    
+    result = await db.execute(
+        select(User).where(User.restaurant_id == current_user.restaurant_id)
+    )
+    users = result.scalars().all()
+    
+    return [
+        UserBase(
+            username=user.username,
+            email=user.email,
+            role=user.role
+        )
+        for user in users
+    ]

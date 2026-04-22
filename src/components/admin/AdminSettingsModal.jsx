@@ -1,7 +1,7 @@
 // AdminSettingsModal.jsx - Complete Production Ready
 import React, { useState, useEffect } from 'react';
 import { X, Save, CreditCard, User, Box, AlertCircle, CheckCircle } from 'lucide-react';
-import { getTheme, COMMON_STYLES, FONTS } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 // Success Modal Component
 function SuccessModal({ isOpen, onClose, message, isDarkMode }) {

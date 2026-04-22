@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getTheme, COMMON_STYLES, FONTS } from "./theme";
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 

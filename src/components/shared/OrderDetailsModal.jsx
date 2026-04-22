@@ -1,6 +1,6 @@
 // OrderDetailsModal.jsx
 import React from 'react';
-import { getTheme, COMMON_STYLES } from './theme';
+import { getTheme, COMMON_STYLES, FONTS } from "./theme";  // ✅ Already correct
 
 export default function OrderDetailsModal({ order, onClose, onComplete, isDarkMode }) {
   if (!order) return null;

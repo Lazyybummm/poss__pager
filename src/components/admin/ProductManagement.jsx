@@ -1,6 +1,6 @@
 // Updated ProductManagement.jsx - Fixed double entry bug
 import React, { useState, useMemo } from "react";
-import { getTheme, COMMON_STYLES } from "./theme";
+import { getTheme, COMMON_STYLES, FONTS } from "../shared/theme";
 import { Plus, Search, Edit2, Trash2, Package, X, Check, AlertCircle, Loader } from "lucide-react";
 
 const API_URL = import.meta.env?.VITE_API_URL || "http://localhost:8000";
